@@ -1,5 +1,6 @@
 pub mod audio;
 pub mod history;
+pub mod llm_models;
 pub mod models;
 pub mod transcription;
 

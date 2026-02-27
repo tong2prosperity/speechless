@@ -102,7 +102,7 @@ function App() {
       if (hasModels) {
         // Returning user - but check if they need to grant permissions on macOS
         setIsReturningUser(true);
-        if (platform() === "macos") {
+        if (platform() === "macos" && !import.meta.env.DEV) {
           try {
             const [hasAccessibility, hasMicrophone] = await Promise.all([
               checkAccessibilityPermission(),
@@ -122,7 +122,7 @@ function App() {
       } else {
         // New user - start full onboarding
         setIsReturningUser(false);
-        setOnboardingStep("accessibility");
+        setOnboardingStep(import.meta.env.DEV ? "model" : "accessibility");
       }
     } catch (error) {
       console.error("Failed to check onboarding status:", error);

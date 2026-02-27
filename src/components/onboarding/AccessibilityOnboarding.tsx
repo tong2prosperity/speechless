@@ -313,6 +313,15 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
             </div>
           </div>
         </div>
+        
+        {import.meta.env.DEV && (
+          <button
+            onClick={onComplete}
+            className="mt-4 text-xs text-text/30 hover:text-text/50 underline transition-colors cursor-pointer"
+          >
+            [DEV ONLY] Skip Status Check
+          </button>
+        )}
       </div>
     </div>
   );

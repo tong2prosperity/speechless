@@ -50,6 +50,10 @@ const PostProcessingSettingsApiComponent: React.FC = () => {
             {t("settings.postProcessing.api.appleIntelligence.unavailable")}
           </Alert>
         ) : null
+      ) : state.isNaviProvider ? (
+        <Alert variant="info" contained>
+          {"Local LLM requests are processed entirely on your device using the downloaded model."}
+        </Alert>
       ) : (
         <>
           {state.selectedProvider?.id === "custom" && (
@@ -96,7 +100,7 @@ const PostProcessingSettingsApiComponent: React.FC = () => {
         </>
       )}
 
-      {!state.isAppleProvider && (
+      {!state.isAppleProvider && !state.isNaviProvider && (
         <SettingContainer
           title={t("settings.postProcessing.api.model.title")}
           description={

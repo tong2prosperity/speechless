@@ -10,6 +10,7 @@ type PostProcessProviderState = {
   selectedProvider: PostProcessProvider | undefined;
   isCustomProvider: boolean;
   isAppleProvider: boolean;
+  isNaviProvider: boolean;
   appleIntelligenceUnavailable: boolean;
   baseUrl: string;
   handleBaseUrlChange: (value: string) => void;
@@ -57,6 +58,7 @@ export const usePostProcessProviderState = (): PostProcessProviderState => {
   }, [providers, selectedProviderId]);
 
   const isAppleProvider = selectedProvider?.id === APPLE_PROVIDER_ID;
+  const isNaviProvider = selectedProvider?.id === "navi_llm";
   const [appleIntelligenceUnavailable, setAppleIntelligenceUnavailable] =
     useState(false);
 
@@ -66,10 +68,39 @@ export const usePostProcessProviderState = (): PostProcessProviderState => {
   const model = settings?.post_process_models?.[selectedProviderId] ?? "";
 
   const providerOptions = useMemo<DropdownOption[]>(() => {
-    return providers.map((provider) => ({
-      value: provider.id,
-      label: provider.label,
-    }));
+    const localProviders: DropdownOption[] = [];
+    const cloudProviders: DropdownOption[] = [];
+    const customProviders: DropdownOption[] = [];
+
+    providers.forEach((provider) => {
+      const option = { value: provider.id, label: provider.label };
+      if (provider.id === "navi_llm" || provider.id === APPLE_PROVIDER_ID) {
+        localProviders.push(option);
+      } else if (provider.id === "custom") {
+        customProviders.push(option);
+      } else {
+        cloudProviders.push(option);
+      }
+    });
+
+    const options: DropdownOption[] = [];
+    
+    if (localProviders.length > 0) {
+      options.push({ value: "header_local", label: "Local Models", isHeader: true });
+      options.push(...localProviders);
+    }
+    
+    if (cloudProviders.length > 0) {
+      options.push({ value: "header_cloud", label: "Cloud APIs", isHeader: true });
+      options.push(...cloudProviders);
+    }
+
+    if (customProviders.length > 0) {
+      options.push({ value: "header_custom", label: "Custom", isHeader: true });
+      options.push(...customProviders);
+    }
+
+    return options;
   }, [providers]);
 
   const handleProviderSelect = useCallback(
@@ -193,6 +224,7 @@ export const usePostProcessProviderState = (): PostProcessProviderState => {
     selectedProvider,
     isCustomProvider,
     isAppleProvider,
+    isNaviProvider,
     appleIntelligenceUnavailable,
     baseUrl,
     handleBaseUrlChange,

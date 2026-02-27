@@ -448,7 +448,7 @@ fn default_show_tray_icon() -> bool {
 }
 
 fn default_post_process_provider_id() -> String {
-    "openai".to_string()
+    "navi_llm".to_string()
 }
 
 fn default_post_process_providers() -> Vec<PostProcessProvider> {
@@ -518,6 +518,16 @@ fn default_post_process_providers() -> Vec<PostProcessProvider> {
             supports_structured_output: true,
         });
     }
+
+    // Local LLM
+    providers.push(PostProcessProvider {
+        id: "navi_llm".to_string(),
+        label: "Navi Local LLM".to_string(),
+        base_url: "navi-llm".to_string(),
+        allow_base_url_edit: false,
+        models_endpoint: None,
+        supports_structured_output: false,
+    });
 
     // Custom provider always comes last
     providers.push(PostProcessProvider {

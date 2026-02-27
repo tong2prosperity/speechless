@@ -1,5 +1,6 @@
 use crate::audio_toolkit::{apply_custom_words, filter_transcription_output};
 use crate::managers::model::{EngineType, ModelManager};
+use crate::managers::sense_voice_sherpa::SenseVoiceSherpaASR;
 use crate::settings::{get_settings, ModelUnloadTimeout};
 use anyhow::Result;
 use log::{debug, error, info, warn};
@@ -42,6 +43,7 @@ enum LoadedEngine {
     Moonshine(MoonshineEngine),
     MoonshineStreaming(MoonshineStreamingEngine),
     SenseVoice(SenseVoiceEngine),
+    SenseVoiceSherpa(SenseVoiceSherpaASR),
 }
 
 #[derive(Clone)]
@@ -165,6 +167,7 @@ impl TranscriptionManager {
                     LoadedEngine::Moonshine(ref mut e) => e.unload_model(),
                     LoadedEngine::MoonshineStreaming(ref mut e) => e.unload_model(),
                     LoadedEngine::SenseVoice(ref mut e) => e.unload_model(),
+                    LoadedEngine::SenseVoiceSherpa(ref mut e) => e.unload_model(),
                 }
             }
             *engine = None; // Drop the engine to free memory
@@ -346,6 +349,30 @@ impl TranscriptionManager {
                     })?;
                 LoadedEngine::SenseVoice(engine)
             }
+            EngineType::SenseVoiceSherpa => {
+                let model_file = model_path
+                    .join("model.int8.onnx")
+                    .to_string_lossy()
+                    .to_string();
+                let tokens_file = model_path.join("tokens.txt").to_string_lossy().to_string();
+
+                let engine = SenseVoiceSherpaASR::new(&model_file, &tokens_file, None, Some(4))
+                    .map_err(|e| {
+                        let error_msg =
+                            format!("Failed to load SenseVoice Sherpa model {}: {}", model_id, e);
+                        let _ = self.app_handle.emit(
+                            "model-state-changed",
+                            ModelStateEvent {
+                                event_type: "loading_failed".to_string(),
+                                model_id: Some(model_id.to_string()),
+                                model_name: Some(model_info.name.clone()),
+                                error: Some(error_msg.clone()),
+                            },
+                        );
+                        anyhow::anyhow!(error_msg)
+                    })?;
+                LoadedEngine::SenseVoiceSherpa(engine)
+            }
         };
 
         // Update the current engine and model ID
@@ -526,6 +553,15 @@ impl TranscriptionManager {
                                     anyhow::anyhow!("SenseVoice transcription failed: {}", e)
                                 })
                         }
+                        LoadedEngine::SenseVoiceSherpa(sherpa_engine) => sherpa_engine
+                            .transcribe(16000, &audio)
+                            .map(|text| transcribe_rs::TranscriptionResult {
+                                text,
+                                segments: None,
+                            })
+                            .map_err(|e| {
+                                anyhow::anyhow!("SenseVoice Sherpa transcription failed: {}", e)
+                            }),
                     }
                 },
             ));

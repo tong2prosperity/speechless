@@ -31,6 +31,10 @@ interface ModelsStore {
   hasAnyModels: boolean;
   isFirstRun: boolean;
   initialized: boolean;
+  llmDownloaded: boolean;
+  llmDownloading: boolean;
+  llmDownloadProgress: DownloadProgress | undefined;
+  llmDownloadStats: DownloadStats | undefined;
 
   // Actions
   initialize: () => Promise<void>;
@@ -45,6 +49,8 @@ interface ModelsStore {
   isModelDownloading: (modelId: string) => boolean;
   isModelExtracting: (modelId: string) => boolean;
   getDownloadProgress: (modelId: string) => DownloadProgress | undefined;
+  downloadLlm: () => Promise<boolean>;
+  checkLlmStatus: () => Promise<void>;
 
   // Internal setters
   setModels: (models: ModelInfo[]) => void;
@@ -66,6 +72,10 @@ export const useModelStore = create<ModelsStore>()(
     hasAnyModels: false,
     isFirstRun: false,
     initialized: false,
+    llmDownloaded: false,
+    llmDownloading: false,
+    llmDownloadProgress: undefined,
+    llmDownloadStats: undefined,
 
     // Internal setters
     setModels: (models) => set({ models }),
@@ -257,6 +267,33 @@ export const useModelStore = create<ModelsStore>()(
       return get().downloadProgress[modelId];
     },
 
+    downloadLlm: async () => {
+      const llmId = "local-llm";
+      try {
+        set({ error: null, llmDownloading: true, llmDownloadProgress: {
+          model_id: llmId,
+          downloaded: 0,
+          total: 0,
+          percentage: 0,
+        }});
+        const result = await commands.downloadLocalLlm(llmId);
+        if (result.status === "ok") {
+          return true;
+        } else {
+          set({ error: `Failed to download LLM: ${result.error}`, llmDownloading: false });
+          return false;
+        }
+      } catch (err) {
+        set({ error: `Failed to download LLM: ${err}`, llmDownloading: false });
+        return false;
+      }
+    },
+
+    checkLlmStatus: async () => {
+      // In a real scenario we'd query the backend for file existence
+      // For now we assume false initially unless a progress event comes back 100% or is finished.
+    },
+
     initialize: async () => {
       if (get().initialized) return;
 
@@ -268,6 +305,49 @@ export const useModelStore = create<ModelsStore>()(
       // Set up event listeners
       listen<DownloadProgress>("model-download-progress", (event) => {
         const progress = event.payload;
+        if (progress.model_id === "local-llm") {
+          set({
+            llmDownloadProgress: progress,
+            llmDownloading: progress.percentage < 100
+          });
+          
+          // Update LLM stats
+          const now = Date.now();
+          set(
+            produce((state) => {
+              const current = state.llmDownloadStats;
+  
+              if (!current) {
+                state.llmDownloadStats = {
+                  startTime: now,
+                  lastUpdate: now,
+                  totalDownloaded: progress.downloaded,
+                  speed: 0,
+                };
+              } else {
+                const timeDiff = (now - current.lastUpdate) / 1000;
+                const bytesDiff = progress.downloaded - current.totalDownloaded;
+  
+                if (timeDiff > 0.5) {
+                  const currentSpeed = bytesDiff / (1024 * 1024) / timeDiff;
+                  const validCurrentSpeed = Math.max(0, currentSpeed);
+                  const smoothedSpeed =
+                    current.speed > 0
+                      ? current.speed * 0.8 + validCurrentSpeed * 0.2
+                      : validCurrentSpeed;
+  
+                  state.llmDownloadStats = {
+                    startTime: current.startTime,
+                    lastUpdate: now,
+                    totalDownloaded: progress.downloaded,
+                    speed: Math.max(0, smoothedSpeed),
+                  };
+                }
+              }
+            }),
+          );
+          return;
+        }
         set(
           produce((state) => {
             state.downloadProgress[progress.model_id] = progress;
@@ -313,6 +393,10 @@ export const useModelStore = create<ModelsStore>()(
 
       listen<string>("model-download-complete", (event) => {
         const modelId = event.payload;
+        if (modelId === "local-llm") {
+           set({ llmDownloading: false, llmDownloaded: true });
+           return;
+        }
         set(
           produce((state) => {
             delete state.downloadingModels[modelId];

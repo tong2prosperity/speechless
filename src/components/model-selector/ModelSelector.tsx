@@ -37,6 +37,8 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
     downloadStats,
     extractingModels,
     selectModel,
+    llmDownloading,
+    llmDownloadProgress,
   } = useModelStore();
 
   const [modelStatus, setModelStatus] = useState<ModelStatus>("unloaded");
@@ -189,6 +191,12 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
       }
     }
 
+    if (llmDownloading && llmDownloadProgress) {
+        return t("modelSelector.downloading", { 
+          percentage: Math.max(0, Math.min(100, Math.round(llmDownloadProgress.percentage)))
+        });
+    }
+
     const currentModelInfo = models.find((m) => m.id === displayModelId);
 
     switch (modelStatus) {
@@ -226,7 +234,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
   // Derive display status from model status + store state
   const getDisplayStatus = (): ModelStatus => {
     if (Object.keys(extractingModels).length > 0) return "extracting";
-    if (Object.keys(downloadProgress).length > 0) return "downloading";
+    if (Object.keys(downloadProgress).length > 0 || llmDownloading) return "downloading";
     return modelStatus;
   };
 

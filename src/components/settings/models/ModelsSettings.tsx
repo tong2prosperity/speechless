@@ -33,6 +33,11 @@ export const ModelsSettings: React.FC = () => {
     cancelDownload,
     selectModel,
     deleteModel,
+    llmDownloaded,
+    llmDownloading,
+    llmDownloadProgress,
+    llmDownloadStats,
+    downloadLlm,
   } = useModelStore();
 
   // click outside handler for language dropdown
@@ -350,6 +355,50 @@ export const ModelsSettings: React.FC = () => {
               ))}
             </div>
           )}
+
+          {/* Local LLM Section */}
+          <div className="space-y-3 pt-4 border-t border-mid-gray/20">
+            <h2 className="text-sm font-medium text-text/60">
+              Local LLM Model
+            </h2>
+            <div className="bg-background border border-mid-gray/20 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-semibold text-text">
+                  Qwen3-4B-Instruct
+                </h3>
+                <p className="text-sm text-text/60 mt-0.5">
+                  Local language model for post-processing entirely on your device.
+                </p>
+                {llmDownloading && llmDownloadProgress && (
+                  <div className="mt-2 text-xs text-text/50">
+                    Downloading: {Math.round(llmDownloadProgress.percentage)}% 
+                    {llmDownloadStats?.speed ? ` (${llmDownloadStats.speed.toFixed(1)} MB/s)` : ""}
+                  </div>
+                )}
+              </div>
+              <div className="flex-shrink-0">
+                {llmDownloaded ? (
+                  <div className="px-3 py-1.5 text-sm font-medium text-logo-primary bg-logo-primary/10 rounded-lg">
+                    Downloaded
+                  </div>
+                ) : llmDownloading ? (
+                  <div className="w-24 h-8 bg-mid-gray/10 rounded-lg overflow-hidden relative">
+                    <div 
+                      className="absolute top-0 left-0 h-full bg-logo-primary/20 transition-all duration-300"
+                      style={{ width: `${llmDownloadProgress?.percentage || 0}%` }}
+                    />
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => downloadLlm()}
+                    className="px-4 py-2 text-sm font-medium text-white bg-logo-primary rounded-lg hover:bg-logo-primary/90 transition-colors"
+                  >
+                    Download
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="text-center py-8 text-text/50">

@@ -62,8 +62,8 @@ const AccessibilityPermissions: React.FC = () => {
     initialSetup();
   }, [isMacOS]);
 
-  // Skip rendering on non-macOS platforms or if permission is already granted
-  if (!isMacOS || hasAccessibility) {
+  // Skip rendering on non-macOS platforms, if permission is already granted, or in development mode
+  if (!isMacOS || hasAccessibility || import.meta.env.DEV) {
     return null;
   }
 

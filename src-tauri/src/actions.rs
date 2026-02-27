@@ -118,6 +118,39 @@ async fn post_process_transcription(settings: &AppSettings, transcription: &str)
         .cloned()
         .unwrap_or_default();
 
+    // Handle navi-llm natively
+    if provider.id == "navi_llm" {
+        debug!(
+            "Using navi_llm for post-processing with model path: {}",
+            provider.base_url
+        );
+        let processed_prompt = prompt.replace("${output}", transcription);
+
+        let path = provider.base_url.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let config = crate::navi_llm::LlmConfig::new(path);
+            let model = crate::navi_llm::LlmModel::load(config).map_err(|e| e.to_string())?;
+            model.complete(&processed_prompt).map_err(|e| e.to_string())
+        })
+        .await
+        .unwrap_or_else(|e| Err(e.to_string()));
+
+        return match result {
+            Ok(content) => {
+                let content = strip_invisible_chars(&content);
+                debug!(
+                    "navi_llm post-processing succeeded. Output length: {} chars",
+                    content.len()
+                );
+                Some(content)
+            }
+            Err(e) => {
+                error!("navi_llm post-processing failed: {}", e);
+                None
+            }
+        };
+    }
+
     if provider.supports_structured_output {
         debug!("Using structured outputs for provider '{}'", provider.id);
 
