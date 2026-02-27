@@ -290,17 +290,23 @@ export const useModelStore = create<ModelsStore>()(
     },
 
     checkLlmStatus: async () => {
-      // In a real scenario we'd query the backend for file existence
-      // For now we assume false initially unless a progress event comes back 100% or is finished.
+      try {
+        const result = await commands.checkLocalLlmDownloaded();
+        if (result.status === "ok") {
+          set({ llmDownloaded: result.data });
+        }
+      } catch (err) {
+        console.error("Failed to check LLM status:", err);
+      }
     },
 
     initialize: async () => {
       if (get().initialized) return;
 
-      const { loadModels, loadCurrentModel, checkFirstRun } = get();
+      const { loadModels, loadCurrentModel, checkFirstRun, checkLlmStatus } = get();
 
       // Load initial data
-      await Promise.all([loadModels(), loadCurrentModel(), checkFirstRun()]);
+      await Promise.all([loadModels(), loadCurrentModel(), checkFirstRun(), checkLlmStatus()]);
 
       // Set up event listeners
       listen<DownloadProgress>("model-download-progress", (event) => {

@@ -6,7 +6,7 @@ use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::LlamaModel;
-use llama_cpp_2::model::{AddBos, LlamaChatMessage, Special};
+use llama_cpp_2::model::{AddBos, LlamaChatMessage};
 use llama_cpp_2::sampling::LlamaSampler;
 use llama_cpp_2::{send_logs_to_tracing, LogOptions};
 
@@ -23,7 +23,7 @@ impl LlmModel {
     /// 从配置加载模型
     pub fn load(config: LlmConfig) -> Result<Self> {
         // 初始化日志
-        send_logs_to_tracing(LogOptions::default().with_logs_enabled(config.verbose));
+        // send_logs_to_tracing(LogOptions::default().with_logs_enabled(config.verbose));
 
         tracing::info!("正在加载本地 LLM 模型: {:?}", config.model_path);
         let start = std::time::Instant::now();
@@ -126,7 +126,7 @@ impl LlmModel {
             }
 
             // 转换 token 为文本
-            let output_bytes = self.model.token_to_bytes(token, Special::Tokenize)?;
+            let output_bytes = self.model.token_to_piece_bytes(token, 512, true, None)?;
             let mut token_str = String::with_capacity(32);
             let _ = decoder.decode_to_string(&output_bytes, &mut token_str, false);
             output.push_str(&token_str);
@@ -228,7 +228,7 @@ impl LlmModel {
             }
 
             // 转换 token 为文本
-            let output_bytes = self.model.token_to_bytes(token, Special::Tokenize)?;
+            let output_bytes = self.model.token_to_piece_bytes(token, 512, true, None)?;
             let mut token_str = String::with_capacity(32);
             let _ = decoder.decode_to_string(&output_bytes, &mut token_str, false);
 
@@ -271,7 +271,7 @@ impl LlmModel {
 
         if let Some(system_prompt) = &self.config.system_prompt {
             messages.push(
-                LlamaChatMessage::new("system".to_string(), system_prompt.to_string())
+                LlamaChatMessage::new("system".to_string(), system_prompt.clone())
                     .map_err(|e| anyhow::anyhow!("创建系统消息失败: {:?}", e))?,
             );
         }
@@ -281,8 +281,11 @@ impl LlmModel {
                 .map_err(|e| anyhow::anyhow!("创建用户消息失败: {:?}", e))?,
         );
 
-        match self.model.apply_chat_template(&tmpl, &messages, true) {
-            Ok(p) => Ok(p),
+        match self
+            .model
+            .apply_chat_template_with_tools_oaicompat(&tmpl, &messages, None, None, true)
+        {
+            Ok(result) => Ok(result.prompt),
             Err(e) => {
                 tracing::warn!("应用聊天模板失败: {:?}, 将使用原始输入", e);
                 Ok(user_prompt.to_string())

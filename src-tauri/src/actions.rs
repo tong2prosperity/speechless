@@ -56,7 +56,11 @@ fn build_system_prompt(prompt_template: &str) -> String {
     prompt_template.replace("${output}", "").trim().to_string()
 }
 
-async fn post_process_transcription(settings: &AppSettings, transcription: &str) -> Option<String> {
+async fn post_process_transcription(
+    app: &AppHandle,
+    settings: &AppSettings,
+    transcription: &str,
+) -> Option<String> {
     let provider = match settings.active_post_process_provider().cloned() {
         Some(provider) => provider,
         None => {
@@ -64,6 +68,106 @@ async fn post_process_transcription(settings: &AppSettings, transcription: &str)
             return None;
         }
     };
+
+    // Handle navi-llm natively — must come BEFORE the empty-model guard because
+    // navi_llm does not store a model name in post_process_models.
+    if provider.id == "navi_llm" {
+        debug!("[post-process] Provider selected: navi_llm (local inference)");
+
+        let selected_prompt_id = match &settings.post_process_selected_prompt_id {
+            Some(id) => id.clone(),
+            None => {
+                debug!("[post-process] navi_llm: skipped — no prompt selected");
+                return None;
+            }
+        };
+
+        let prompt = match settings
+            .post_process_prompts
+            .iter()
+            .find(|p| p.id == selected_prompt_id)
+        {
+            Some(p) => {
+                debug!("[post-process] navi_llm: using prompt '{}'", p.name);
+                p.prompt.clone()
+            }
+            None => {
+                debug!(
+                    "[post-process] navi_llm: skipped — prompt id '{}' not found",
+                    selected_prompt_id
+                );
+                return None;
+            }
+        };
+
+        if prompt.trim().is_empty() {
+            debug!("[post-process] navi_llm: skipped — prompt is empty");
+            return None;
+        }
+
+        // Resolve the actual GGUF file path from LlmManager
+        let llm_manager = app.state::<Arc<crate::managers::llm_manager::LlmManager>>();
+        let gguf_path = llm_manager
+            .get_models_dir()
+            .join("Qwen3-4B-Instruct-2507-Q4_1.gguf");
+
+        if !gguf_path.exists() {
+            error!(
+                "[post-process] navi_llm: GGUF model not found at {:?}",
+                gguf_path
+            );
+            return None;
+        }
+
+        let input_len = transcription.len();
+        debug!(
+            "[post-process] navi_llm: model path = {:?}, input length = {} chars",
+            gguf_path, input_len
+        );
+        log::info!("[post-process] navi_llm: starting local inference…");
+        let infer_start = std::time::Instant::now();
+
+        let processed_prompt = prompt.replace("${output}", transcription);
+
+        let result = tokio::task::spawn_blocking(move || {
+            log::info!("[post-process] navi_llm: loading model from disk…");
+            let load_start = std::time::Instant::now();
+            let config = crate::navi_llm::LlmConfig::new(gguf_path);
+            let model = crate::navi_llm::LlmModel::load(config).map_err(|e| e.to_string())?;
+            log::info!(
+                "[post-process] navi_llm: model loaded in {:?}, running completion…",
+                load_start.elapsed()
+            );
+            model.complete(&processed_prompt).map_err(|e| e.to_string())
+        })
+        .await
+        .unwrap_or_else(|e| Err(e.to_string()));
+
+        return match result {
+            Ok(content) => {
+                let content = strip_invisible_chars(&content);
+                log::info!(
+                    "[post-process] navi_llm: inference completed in {:?} — output {} chars (input was {} chars)",
+                    infer_start.elapsed(),
+                    content.len(),
+                    input_len
+                );
+                debug!(
+                    "[post-process] navi_llm output: {:?}",
+                    &content[..content.len().min(200)]
+                );
+                Some(content)
+            }
+            Err(e) => {
+                error!(
+                    "[post-process] navi_llm: inference failed after {:?} — {}",
+                    infer_start.elapsed(),
+                    e
+                );
+                None
+            }
+        };
+    }
 
     let model = settings
         .post_process_models
@@ -117,39 +221,6 @@ async fn post_process_transcription(settings: &AppSettings, transcription: &str)
         .get(&provider.id)
         .cloned()
         .unwrap_or_default();
-
-    // Handle navi-llm natively
-    if provider.id == "navi_llm" {
-        debug!(
-            "Using navi_llm for post-processing with model path: {}",
-            provider.base_url
-        );
-        let processed_prompt = prompt.replace("${output}", transcription);
-
-        let path = provider.base_url.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            let config = crate::navi_llm::LlmConfig::new(path);
-            let model = crate::navi_llm::LlmModel::load(config).map_err(|e| e.to_string())?;
-            model.complete(&processed_prompt).map_err(|e| e.to_string())
-        })
-        .await
-        .unwrap_or_else(|e| Err(e.to_string()));
-
-        return match result {
-            Ok(content) => {
-                let content = strip_invisible_chars(&content);
-                debug!(
-                    "navi_llm post-processing succeeded. Output length: {} chars",
-                    content.len()
-                );
-                Some(content)
-            }
-            Err(e) => {
-                error!("navi_llm post-processing failed: {}", e);
-                None
-            }
-        };
-    }
 
     if provider.supports_structured_output {
         debug!("Using structured outputs for provider '{}'", provider.id);
@@ -476,14 +547,36 @@ impl ShortcutAction for TranscribeAction {
                             // Then apply LLM post-processing if this is the post-process hotkey
                             // Uses final_text which may already have Chinese conversion applied
                             if post_process {
+                                let provider_id = settings
+                                    .active_post_process_provider()
+                                    .map(|p| p.id.as_str())
+                                    .unwrap_or("(none)");
+                                let prompt_name = settings
+                                    .post_process_selected_prompt_id
+                                    .as_deref()
+                                    .and_then(|id| {
+                                        settings.post_process_prompts.iter().find(|p| p.id == id)
+                                    })
+                                    .map(|p| p.name.as_str())
+                                    .unwrap_or("(none)");
+                                log::info!(
+                                    "[post-process] starting — provider='{}', prompt='{}', input {} chars",
+                                    provider_id, prompt_name, final_text.len()
+                                );
                                 show_processing_overlay(&ah);
                             }
+                            let pp_start = std::time::Instant::now();
                             let processed = if post_process {
-                                post_process_transcription(&settings, &final_text).await
+                                post_process_transcription(&ah, &settings, &final_text).await
                             } else {
                                 None
                             };
                             if let Some(processed_text) = processed {
+                                log::info!(
+                                    "[post-process] completed in {:?} — output {} chars",
+                                    pp_start.elapsed(),
+                                    processed_text.len()
+                                );
                                 post_processed_text = Some(processed_text.clone());
                                 final_text = processed_text;
 

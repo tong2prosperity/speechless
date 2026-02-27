@@ -11,7 +11,7 @@ use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::LlamaModel;
-use llama_cpp_2::model::{LlamaChatMessage, LlamaChatTemplate, Special};
+use llama_cpp_2::model::{LlamaChatMessage, LlamaChatTemplate};
 use llama_cpp_2::sampling::LlamaSampler;
 use llama_cpp_2::token::LlamaToken;
 use llama_cpp_2::{send_logs_to_tracing, LogOptions};
@@ -224,7 +224,7 @@ impl<'a> ManagedSession<'a> {
 
         let mut messages = Vec::new();
         if let Some(ref system_prompt) = config.system_prompt {
-            messages.push(ChatMessage::system(system_prompt.to_string()));
+            messages.push(ChatMessage::system(system_prompt.clone()));
         }
 
         Ok(Self {
@@ -388,7 +388,7 @@ impl<'a> ManagedSession<'a> {
             }
 
             // Token -> 文本
-            let output_bytes = self.model.token_to_bytes(token, Special::Tokenize)?;
+            let output_bytes = self.model.token_to_piece_bytes(token, 512, true, None)?;
             let mut token_str = String::with_capacity(32);
             let _ = decoder.decode_to_string(&output_bytes, &mut token_str, false);
 
@@ -552,7 +552,7 @@ impl<'a> ManagedSession<'a> {
 
         if let Some(ref system_prompt) = self.config.system_prompt {
             self.messages
-                .push(ChatMessage::system(system_prompt.to_string()));
+                .push(ChatMessage::system(system_prompt.clone()));
         }
     }
 
