@@ -24,7 +24,6 @@ use transcribe_rs::{
             Language as SenseVoiceLanguage, SenseVoiceEngine, SenseVoiceInferenceParams,
             SenseVoiceModelParams,
         },
-        whisper::{WhisperEngine, WhisperInferenceParams},
     },
     TranscriptionEngine,
 };
@@ -38,7 +37,6 @@ pub struct ModelStateEvent {
 }
 
 enum LoadedEngine {
-    Whisper(WhisperEngine),
     Parakeet(ParakeetEngine),
     Moonshine(MoonshineEngine),
     MoonshineStreaming(MoonshineStreamingEngine),
@@ -162,7 +160,6 @@ impl TranscriptionManager {
             let mut engine = self.lock_engine();
             if let Some(ref mut loaded_engine) = *engine {
                 match loaded_engine {
-                    LoadedEngine::Whisper(ref mut e) => e.unload_model(),
                     LoadedEngine::Parakeet(ref mut e) => e.unload_model(),
                     LoadedEngine::Moonshine(ref mut e) => e.unload_model(),
                     LoadedEngine::MoonshineStreaming(ref mut e) => e.unload_model(),
@@ -247,23 +244,6 @@ impl TranscriptionManager {
 
         // Create appropriate engine based on model type
         let loaded_engine = match model_info.engine_type {
-            EngineType::Whisper => {
-                let mut engine = WhisperEngine::new();
-                engine.load_model(&model_path).map_err(|e| {
-                    let error_msg = format!("Failed to load whisper model {}: {}", model_id, e);
-                    let _ = self.app_handle.emit(
-                        "model-state-changed",
-                        ModelStateEvent {
-                            event_type: "loading_failed".to_string(),
-                            model_id: Some(model_id.to_string()),
-                            model_name: Some(model_info.name.clone()),
-                            error: Some(error_msg.clone()),
-                        },
-                    );
-                    anyhow::anyhow!(error_msg)
-                })?;
-                LoadedEngine::Whisper(engine)
-            }
             EngineType::Parakeet => {
                 let mut engine = ParakeetEngine::new();
                 engine
@@ -491,30 +471,6 @@ impl TranscriptionManager {
             let transcribe_result = catch_unwind(AssertUnwindSafe(
                 || -> Result<transcribe_rs::TranscriptionResult> {
                     match &mut engine {
-                        LoadedEngine::Whisper(whisper_engine) => {
-                            let whisper_language = if settings.selected_language == "auto" {
-                                None
-                            } else {
-                                let normalized = if settings.selected_language == "zh-Hans"
-                                    || settings.selected_language == "zh-Hant"
-                                {
-                                    "zh".to_string()
-                                } else {
-                                    settings.selected_language.clone()
-                                };
-                                Some(normalized)
-                            };
-
-                            let params = WhisperInferenceParams {
-                                language: whisper_language,
-                                translate: settings.translate_to_english,
-                                ..Default::default()
-                            };
-
-                            whisper_engine
-                                .transcribe_samples(audio, Some(params))
-                                .map_err(|e| anyhow::anyhow!("Whisper transcription failed: {}", e))
-                        }
                         LoadedEngine::Parakeet(parakeet_engine) => {
                             let params = ParakeetInferenceParams {
                                 timestamp_granularity: TimestampGranularity::Segment,
