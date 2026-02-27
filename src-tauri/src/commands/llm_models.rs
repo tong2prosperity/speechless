@@ -1,6 +1,7 @@
 use crate::managers::llm_manager::LlmManager;
+use crate::settings::{get_settings, write_settings, LocalLlmUnloadTimeout};
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 #[tauri::command]
 #[specta::specta]
@@ -27,4 +28,12 @@ pub async fn check_local_llm_downloaded(
     let file_name = "Qwen3-4B-Instruct-2507-Q4_1.gguf";
     let target_path = llm_manager.get_models_dir().join(file_name);
     Ok(target_path.exists())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_local_llm_unload_timeout(app: AppHandle, timeout: LocalLlmUnloadTimeout) {
+    let mut settings = get_settings(&app);
+    settings.local_llm_unload_timeout = timeout;
+    write_settings(&app, settings);
 }

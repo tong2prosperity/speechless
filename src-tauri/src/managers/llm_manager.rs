@@ -3,10 +3,15 @@ use async_trait::async_trait;
 use log::{debug, error, info};
 use modelscope_ng::{ModelScope, ProgressCallback};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, SystemTime};
 use tauri::{AppHandle, Emitter, Manager};
+
+use crate::navi_llm::{LlmConfig, LlmSessionFactory};
+use crate::settings::{get_settings, LocalLlmUnloadTimeout};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
 pub struct LlmDownloadProgress {
@@ -20,6 +25,23 @@ pub struct LlmManager {
     app_handle: AppHandle,
     models_dir: PathBuf,
     cancel_flags: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    worker_tx: tokio::sync::mpsc::Sender<LlmWorkerCommand>,
+    last_activity: Arc<std::sync::atomic::AtomicU64>,
+    shutdown_signal: Arc<AtomicBool>,
+    watcher_handle: Arc<Mutex<Option<thread::JoinHandle<()>>>>,
+}
+
+struct CompleteRequest {
+    model_path: PathBuf,
+    system_prompt: Option<String>,
+    user_query: String,
+    responder: tokio::sync::oneshot::Sender<std::result::Result<String, String>>,
+}
+
+enum LlmWorkerCommand {
+    Complete(CompleteRequest),
+    Unload,
+    Shutdown,
 }
 
 impl LlmManager {
@@ -35,11 +57,63 @@ impl LlmManager {
             std::fs::create_dir_all(&models_dir)?;
         }
 
-        Ok(Self {
+        let (worker_tx, worker_rx) = tokio::sync::mpsc::channel(32);
+        thread::spawn(move || llm_worker_loop(worker_rx));
+
+        let manager = Self {
             app_handle: app_handle.clone(),
             models_dir,
             cancel_flags: Arc::new(Mutex::new(HashMap::new())),
-        })
+            worker_tx,
+            last_activity: Arc::new(std::sync::atomic::AtomicU64::new(
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64,
+            )),
+            shutdown_signal: Arc::new(AtomicBool::new(false)),
+            watcher_handle: Arc::new(Mutex::new(None)),
+        };
+
+        {
+            let app_handle_cloned = app_handle.clone();
+            let worker_tx = manager.worker_tx.clone();
+            let last_activity = manager.last_activity.clone();
+            let shutdown_signal = manager.shutdown_signal.clone();
+            let handle = thread::spawn(move || {
+                while !shutdown_signal.load(Ordering::Relaxed) {
+                    thread::sleep(Duration::from_secs(10));
+                    if shutdown_signal.load(Ordering::Relaxed) {
+                        break;
+                    }
+
+                    let settings = get_settings(&app_handle_cloned);
+                    let timeout_seconds = settings.local_llm_unload_timeout.to_seconds();
+                    if timeout_seconds.is_none() {
+                        continue;
+                    }
+                    if settings.local_llm_unload_timeout == LocalLlmUnloadTimeout::Never {
+                        continue;
+                    }
+
+                    let last = last_activity.load(Ordering::Relaxed);
+                    let now_ms = SystemTime::now()
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64;
+
+                    let timeout_ms = timeout_seconds.unwrap_or(0).saturating_mul(1000);
+                    if timeout_ms > 0 && now_ms.saturating_sub(last) > timeout_ms {
+                        debug!("Unloading local LLM session due to inactivity");
+                        let _ = worker_tx.blocking_send(LlmWorkerCommand::Unload);
+                        last_activity.store(now_ms, Ordering::Relaxed);
+                    }
+                }
+            });
+            *manager.watcher_handle.lock().unwrap() = Some(handle);
+        }
+
+        Ok(manager)
     }
 
     pub fn get_models_dir(&self) -> PathBuf {
@@ -123,6 +197,129 @@ impl LlmManager {
         }
 
         Ok(())
+    }
+
+    pub async fn complete_with_session(
+        &self,
+        model_path: PathBuf,
+        system_prompt: Option<String>,
+        user_query: String,
+    ) -> Result<String> {
+        self.touch_activity();
+        let (responder, rx) = tokio::sync::oneshot::channel();
+        self.worker_tx
+            .send(LlmWorkerCommand::Complete(CompleteRequest {
+                model_path,
+                system_prompt,
+                user_query,
+                responder,
+            }))
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to send command to LLM worker: {}", e))?;
+
+        match rx.await {
+            Ok(Ok(s)) => {
+                self.touch_activity();
+                Ok(s)
+            }
+            Ok(Err(e)) => Err(anyhow::anyhow!(e)),
+            Err(e) => Err(anyhow::anyhow!("LLM worker channel closed: {}", e)),
+        }
+    }
+
+    fn touch_activity(&self) {
+        let now_ms = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        self.last_activity.store(now_ms, Ordering::Relaxed);
+    }
+}
+
+fn llm_worker_loop(mut rx: tokio::sync::mpsc::Receiver<LlmWorkerCommand>) {
+    let mut pending_complete: Option<CompleteRequest> = None;
+
+    loop {
+        let initial = if let Some(req) = pending_complete.take() {
+            req
+        } else {
+            loop {
+                let cmd = match rx.blocking_recv() {
+                    Some(cmd) => cmd,
+                    None => return,
+                };
+                match cmd {
+                    LlmWorkerCommand::Complete(req) => break req,
+                    LlmWorkerCommand::Unload => {}
+                    LlmWorkerCommand::Shutdown => return,
+                }
+            }
+        };
+
+        log::info!(
+            "[llm_worker] Loading local LLM from: {:?}",
+            initial.model_path
+        );
+        let mut config = LlmConfig::new(initial.model_path.clone());
+        if let Some(ref sp) = initial.system_prompt {
+            if !sp.is_empty() {
+                config = config.with_system_prompt(sp);
+            }
+        }
+
+        match LlmSessionFactory::new(config) {
+            Ok(factory) => match factory.create_session() {
+                Ok(mut session) => {
+                    let res = session.chat(&initial.user_query).map_err(|e| e.to_string());
+                    let _ = initial.responder.send(res);
+
+                    loop {
+                        let cmd = match rx.blocking_recv() {
+                            Some(cmd) => cmd,
+                            None => return,
+                        };
+
+                        match cmd {
+                            LlmWorkerCommand::Complete(req) => {
+                                if req.model_path != initial.model_path
+                                    || req.system_prompt != initial.system_prompt
+                                {
+                                    log::info!("[llm_worker] Config changed, recreating session");
+                                    pending_complete = Some(req);
+                                    break;
+                                }
+
+                                log::info!("[llm_worker] Reusing KV cache");
+                                session.clear();
+                                let res = session.chat(&req.user_query).map_err(|e| e.to_string());
+                                let _ = req.responder.send(res);
+                            }
+                            LlmWorkerCommand::Unload => {
+                                log::info!("[llm_worker] Unloading local LLM session");
+                                break;
+                            }
+                            LlmWorkerCommand::Shutdown => return,
+                        }
+                    }
+                }
+                Err(e) => {
+                    let _ = initial.responder.send(Err(e.to_string()));
+                }
+            },
+            Err(e) => {
+                let _ = initial.responder.send(Err(e.to_string()));
+            }
+        }
+    }
+}
+
+impl Drop for LlmManager {
+    fn drop(&mut self) {
+        self.shutdown_signal.store(true, Ordering::Relaxed);
+        let _ = self.worker_tx.try_send(LlmWorkerCommand::Shutdown);
+        if let Some(handle) = self.watcher_handle.lock().unwrap().take() {
+            let _ = handle.join();
+        }
     }
 }
 

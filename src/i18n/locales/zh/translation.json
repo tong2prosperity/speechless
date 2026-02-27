@@ -356,6 +356,16 @@
           "placeholderWithOptions": "搜索或选择模型",
           "placeholderNoOptions": "输入模型名称",
           "refreshModels": "刷新模型"
+        },
+        "localLlmInfo": "本地 LLM 请求会完全在你的设备上使用已下载模型处理。",
+        "localLlmUnload": {
+          "title": "本地 LLM 自动卸载",
+          "description": "在所选时长内没有任何后处理请求时，自动将本地 LLM 会话从内存卸载。",
+          "options": {
+            "hour1": "1 小时后",
+            "hour3": "3 小时后",
+            "never": "永不"
+          }
         }
       },
       "prompts": {

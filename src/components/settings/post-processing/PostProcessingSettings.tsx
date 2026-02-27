@@ -21,6 +21,7 @@ import { ModelSelect } from "../PostProcessingSettingsApi/ModelSelect";
 import { usePostProcessProviderState } from "../PostProcessingSettingsApi/usePostProcessProviderState";
 import { ShortcutInput } from "../ShortcutInput";
 import { useSettings } from "../../../hooks/useSettings";
+import { LocalLlmUnloadTimeoutSetting } from "./LocalLlmUnloadTimeout";
 
 const PostProcessingSettingsApiComponent: React.FC = () => {
   const { t } = useTranslation();
@@ -51,9 +52,12 @@ const PostProcessingSettingsApiComponent: React.FC = () => {
           </Alert>
         ) : null
       ) : state.isNaviProvider ? (
-        <Alert variant="info" contained>
-          {"Local LLM requests are processed entirely on your device using the downloaded model."}
-        </Alert>
+        <>
+          <Alert variant="info" contained>
+            {t("settings.postProcessing.api.localLlmInfo")}
+          </Alert>
+          <LocalLlmUnloadTimeoutSetting />
+        </>
       ) : (
         <>
           {state.selectedProvider?.id === "custom" && (

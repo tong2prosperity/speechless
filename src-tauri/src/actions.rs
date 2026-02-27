@@ -127,21 +127,18 @@ async fn post_process_transcription(
         log::info!("[post-process] navi_llm: starting local inference…");
         let infer_start = std::time::Instant::now();
 
-        let processed_prompt = prompt.replace("${output}", transcription);
+        let system_prompt = build_system_prompt(&prompt);
+        let user_query = transcription.to_string();
 
-        let result = tokio::task::spawn_blocking(move || {
-            log::info!("[post-process] navi_llm: loading model from disk…");
-            let load_start = std::time::Instant::now();
-            let config = crate::navi_llm::LlmConfig::new(gguf_path);
-            let model = crate::navi_llm::LlmModel::load(config).map_err(|e| e.to_string())?;
-            log::info!(
-                "[post-process] navi_llm: model loaded in {:?}, running completion…",
-                load_start.elapsed()
-            );
-            model.complete(&processed_prompt).map_err(|e| e.to_string())
-        })
-        .await
-        .unwrap_or_else(|e| Err(e.to_string()));
+        let system_prompt_opt = if system_prompt.is_empty() {
+            None
+        } else {
+            Some(system_prompt)
+        };
+
+        let result = llm_manager
+            .complete_with_session(gguf_path, system_prompt_opt, user_query)
+            .await;
 
         return match result {
             Ok(content) => {
@@ -337,12 +334,20 @@ async fn post_process_transcription(
         }
     }
 
-    // Legacy mode: Replace ${output} variable in the prompt with the actual text
-    let processed_prompt = prompt.replace("${output}", transcription);
-    debug!("Processed prompt length: {} chars", processed_prompt.len());
+    // Legacy mode: Send system prompt and transcription separately without schema
+    let system_prompt = build_system_prompt(&prompt);
+    let user_content = transcription.to_string();
+    debug!("System prompt length: {} chars", system_prompt.len());
 
-    match crate::llm_client::send_chat_completion(&provider, api_key, &model, processed_prompt)
-        .await
+    match crate::llm_client::send_chat_completion_with_schema(
+        &provider,
+        api_key,
+        &model,
+        user_content,
+        Some(system_prompt),
+        None,
+    )
+    .await
     {
         Ok(Some(content)) => {
             let content = strip_invisible_chars(&content);

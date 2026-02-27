@@ -127,6 +127,16 @@ pub enum ModelUnloadTimeout {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+pub enum LocalLlmUnloadTimeout {
+    #[serde(rename = "never")]
+    Never,
+    #[serde(rename = "hour1", alias = "hour_1")]
+    Hour1,
+    #[serde(rename = "hour3", alias = "hour_3")]
+    Hour3,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum PasteMethod {
     CtrlV,
@@ -186,6 +196,12 @@ impl Default for ModelUnloadTimeout {
     }
 }
 
+impl Default for LocalLlmUnloadTimeout {
+    fn default() -> Self {
+        LocalLlmUnloadTimeout::Hour1
+    }
+}
+
 impl Default for PasteMethod {
     fn default() -> Self {
         // Default to CtrlV for macOS and Windows, Direct for Linux
@@ -228,6 +244,16 @@ impl ModelUnloadTimeout {
             ModelUnloadTimeout::Immediately => Some(0), // Special case for immediate unloading
             ModelUnloadTimeout::Sec5 => Some(5),
             _ => self.to_minutes().map(|m| m * 60),
+        }
+    }
+}
+
+impl LocalLlmUnloadTimeout {
+    pub fn to_seconds(self) -> Option<u64> {
+        match self {
+            LocalLlmUnloadTimeout::Never => None,
+            LocalLlmUnloadTimeout::Hour1 => Some(60 * 60),
+            LocalLlmUnloadTimeout::Hour3 => Some(3 * 60 * 60),
         }
     }
 }
@@ -315,6 +341,8 @@ pub struct AppSettings {
     pub custom_words: Vec<String>,
     #[serde(default)]
     pub model_unload_timeout: ModelUnloadTimeout,
+    #[serde(default = "default_local_llm_unload_timeout")]
+    pub local_llm_unload_timeout: LocalLlmUnloadTimeout,
     #[serde(default = "default_word_correction_threshold")]
     pub word_correction_threshold: f64,
     #[serde(default = "default_history_limit")]
@@ -435,6 +463,10 @@ fn default_sound_theme() -> SoundTheme {
 
 fn default_post_process_enabled() -> bool {
     false
+}
+
+fn default_local_llm_unload_timeout() -> LocalLlmUnloadTimeout {
+    LocalLlmUnloadTimeout::Hour1
 }
 
 fn default_app_language() -> String {
@@ -572,7 +604,8 @@ fn default_post_process_prompts() -> Vec<LLMPrompt> {
     vec![LLMPrompt {
         id: "default_improve_transcriptions".to_string(),
         name: "Improve Transcriptions".to_string(),
-        prompt: "Clean this transcript:\n1. Fix spelling, capitalization, and punctuation errors\n2. Convert number words to digits (twenty-five → 25, ten percent → 10%, five dollars → $5)\n3. Replace spoken punctuation with symbols (period → ., comma → ,, question mark → ?)\n4. Remove filler words (um, uh, like as filler)\n5. Keep the language in the original version (if it was french, keep it in french for example)\n\nPreserve exact meaning and word order. Do not paraphrase or reorder content.\n\nReturn only the cleaned transcript.\n\nTranscript:\n${output}".to_string(),
+        //prompt: "Clean this transcript:\n1. Fix spelling, capitalization, and punctuation errors\n2. Convert number words to digits (twenty-five → 25, ten percent → 10%, five dollars → $5)\n3. Replace spoken punctuation with symbols (period → ., comma → ,, question mark → ?)\n4. Remove filler words (um, uh, like as filler)\n5. Keep the language in the original version (if it was french, keep it in french for example)\n\nPreserve exact meaning and word order. Do not paraphrase or reorder content.\n\nReturn only the cleaned transcript.\n\nTranscript:\n${output}".to_string(),
+        prompt: "你是 ASR 口语文本规整助手，严格执行以下规则：\n 最高不可突破准则：100% 完整保留用户的原始意图、全部关键信息，严禁任何增删、篡改、引申用户本意的行为；\n 精准剔除文本中所有无意义的口癖、语气填充词（嗯、啊、呃、哦、那个、就是说等）、重复冗余的口语内容；\n 修正口语化的断句混乱、语序颠倒问题，让语句通顺连贯、符合正常表达逻辑；\n 仅输出处理后的最终文本，不得添加任何额外解释、标注、话术.".to_string(),
     }]
 }
 
@@ -711,6 +744,7 @@ pub fn get_default_settings() -> AppSettings {
         log_level: default_log_level(),
         custom_words: Vec::new(),
         model_unload_timeout: ModelUnloadTimeout::Never,
+        local_llm_unload_timeout: default_local_llm_unload_timeout(),
         word_correction_threshold: default_word_correction_threshold(),
         history_limit: default_history_limit(),
         recording_retention_period: default_recording_retention_period(),

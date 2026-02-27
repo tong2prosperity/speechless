@@ -1,15 +1,17 @@
 use crate::settings::{get_settings, write_settings};
 use anyhow::Result;
+use async_trait::async_trait;
 use flate2::read::GzDecoder;
 use futures_util::StreamExt;
 use log::{debug, info, warn};
+use modelscope_ng::{ModelScope, ProgressCallback};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::fs::File;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -60,6 +62,74 @@ pub struct ModelManager {
     available_models: Mutex<HashMap<String, ModelInfo>>,
     cancel_flags: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
     extracting_models: Arc<Mutex<HashSet<String>>>,
+}
+
+const SENSE_VOICE_REPO_ID: &str = "trevorlink/sense_voice_onnx";
+const SENSE_VOICE_REQUIRED_FILES: [&str; 3] = ["model.int8.onnx", "tokens.txt", "silero_v6.onnx"];
+
+#[derive(Clone)]
+struct ModelScopeProgressCallback {
+    app_handle: AppHandle,
+    model_id: String,
+    progress_by_file: Arc<Mutex<HashMap<String, (u64, u64)>>>,
+}
+
+impl ModelScopeProgressCallback {
+    fn emit_aggregated_progress(&self) {
+        let (downloaded, total) = {
+            let progress = self.progress_by_file.lock().unwrap();
+            progress
+                .values()
+                .fold((0_u64, 0_u64), |(d_acc, t_acc), (d, t)| (d_acc + d, t_acc + t))
+        };
+
+        let percentage = if total > 0 {
+            (downloaded as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        let progress = DownloadProgress {
+            model_id: self.model_id.clone(),
+            downloaded,
+            total,
+            percentage,
+        };
+        let _ = self.app_handle.emit("model-download-progress", &progress);
+    }
+}
+
+#[async_trait]
+impl ProgressCallback for ModelScopeProgressCallback {
+    async fn on_file_start(&self, file_name: &str, file_size: u64) {
+        {
+            let mut progress = self.progress_by_file.lock().unwrap();
+            progress.insert(file_name.to_string(), (0, file_size));
+        }
+        self.emit_aggregated_progress();
+    }
+
+    async fn on_file_progress(&self, file_name: &str, downloaded: u64, total: u64) {
+        {
+            let mut progress = self.progress_by_file.lock().unwrap();
+            progress.insert(file_name.to_string(), (downloaded, total));
+        }
+        self.emit_aggregated_progress();
+    }
+
+    async fn on_file_complete(&self, file_name: &str) {
+        {
+            let mut progress = self.progress_by_file.lock().unwrap();
+            if let Some((downloaded, total)) = progress.get_mut(file_name) {
+                if *total > 0 {
+                    *downloaded = *total;
+                }
+            }
+        }
+        self.emit_aggregated_progress();
+    }
+
+    async fn on_file_error(&self, _file_name: &str, _error: &str) {}
 }
 
 impl ModelManager {
@@ -117,7 +187,7 @@ impl ModelManager {
                 description: "Very fast. Chinese, English, Japanese, Korean, Cantonese."
                     .to_string(),
                 filename: "sense-voice-int8".to_string(),
-                url: Some("https://blob.handy.computer/sense-voice-int8.tar.gz".to_string()),
+                url: None,
                 size_mb: 160,
                 is_downloaded: false,
                 is_downloading: false,
@@ -242,7 +312,15 @@ impl ModelManager {
                     let _ = fs::remove_dir_all(&extracting_path);
                 }
 
-                model.is_downloaded = model_path.exists() && model_path.is_dir();
+                model.is_downloaded = if model.id == "sense-voice-int8" {
+                    model_path.exists()
+                        && model_path.is_dir()
+                        && SENSE_VOICE_REQUIRED_FILES
+                            .iter()
+                            .all(|file| model_path.join(file).exists())
+                } else {
+                    model_path.exists() && model_path.is_dir()
+                };
                 model.is_downloading = false;
 
                 // Get partial file size if it exists (for the .tar.gz being downloaded)
@@ -321,6 +399,10 @@ impl ModelManager {
 
         let model_info =
             model_info.ok_or_else(|| anyhow::anyhow!("Model not found: {}", model_id))?;
+
+        if model_id == "sense-voice-int8" {
+            return self.download_sense_voice_model(&model_info).await;
+        }
 
         let url = model_info
             .url
@@ -663,6 +745,151 @@ impl ModelManager {
         Ok(())
     }
 
+    async fn download_sense_voice_model(&self, model_info: &ModelInfo) -> Result<()> {
+        let model_id = &model_info.id;
+        let model_dir = self.models_dir.join(&model_info.filename);
+
+        if !model_dir.exists() {
+            fs::create_dir_all(&model_dir)?;
+        }
+
+        let all_files_exist = SENSE_VOICE_REQUIRED_FILES
+            .iter()
+            .all(|file| model_dir.join(file).exists());
+        if all_files_exist {
+            self.update_download_status()?;
+            let progress = DownloadProgress {
+                model_id: model_id.to_string(),
+                downloaded: 100,
+                total: 100,
+                percentage: 100.0,
+            };
+            let _ = self.app_handle.emit("model-download-progress", &progress);
+            let _ = self.app_handle.emit("model-download-complete", model_id);
+            return Ok(());
+        }
+
+        {
+            let mut models = self.available_models.lock().unwrap();
+            if let Some(model) = models.get_mut(model_id) {
+                model.is_downloading = true;
+            }
+        }
+
+        let cancel_flag = Arc::new(AtomicBool::new(false));
+        {
+            let mut flags = self.cancel_flags.lock().unwrap();
+            flags.insert(model_id.to_string(), cancel_flag.clone());
+        }
+
+        let progress_by_file = Arc::new(Mutex::new(HashMap::new()));
+        {
+            let mut progress = progress_by_file.lock().unwrap();
+            for file in SENSE_VOICE_REQUIRED_FILES {
+                let file_path = model_dir.join(file);
+                if file_path.exists() {
+                    progress.insert(file.to_string(), (1, 1));
+                } else {
+                    progress.insert(file.to_string(), (0, 1));
+                }
+            }
+        }
+
+        let callback = ModelScopeProgressCallback {
+            app_handle: self.app_handle.clone(),
+            model_id: model_id.to_string(),
+            progress_by_file: progress_by_file.clone(),
+        };
+
+        let clear_downloading_state = || {
+            let mut models = self.available_models.lock().unwrap();
+            if let Some(model) = models.get_mut(model_id) {
+                model.is_downloading = false;
+            }
+            drop(models);
+            let mut flags = self.cancel_flags.lock().unwrap();
+            flags.remove(model_id);
+        };
+
+        for file_name in SENSE_VOICE_REQUIRED_FILES {
+            if cancel_flag.load(Ordering::Relaxed) {
+                clear_downloading_state();
+                return Ok(());
+            }
+
+            let target_file = model_dir.join(file_name);
+            if target_file.exists() {
+                continue;
+            }
+
+            if let Err(e) = ModelScope::download_single_file_with_callback(
+                SENSE_VOICE_REPO_ID,
+                file_name,
+                self.models_dir.clone(),
+                callback.clone(),
+            )
+            .await
+            {
+                clear_downloading_state();
+                return Err(anyhow::anyhow!(
+                    "Failed to download SenseVoice file {}: {}",
+                    file_name,
+                    e
+                ));
+            }
+
+            let downloaded_path = self
+                .models_dir
+                .join(SENSE_VOICE_REPO_ID)
+                .join(file_name);
+            if !downloaded_path.exists() {
+                clear_downloading_state();
+                return Err(anyhow::anyhow!(
+                    "Downloaded SenseVoice file not found: {}",
+                    file_name
+                ));
+            }
+
+            if target_file.exists() {
+                let _ = fs::remove_file(&target_file);
+            }
+
+            if fs::rename(&downloaded_path, &target_file).is_err() {
+                fs::copy(&downloaded_path, &target_file)?;
+                let _ = fs::remove_file(&downloaded_path);
+            }
+        }
+
+        let _ = fs::remove_dir_all(self.models_dir.join(SENSE_VOICE_REPO_ID));
+
+        {
+            let mut models = self.available_models.lock().unwrap();
+            if let Some(model) = models.get_mut(model_id) {
+                model.is_downloading = false;
+                model.is_downloaded = true;
+                model.partial_size = 0;
+            }
+        }
+
+        {
+            let mut flags = self.cancel_flags.lock().unwrap();
+            flags.remove(model_id);
+        }
+
+        let final_progress = DownloadProgress {
+            model_id: model_id.to_string(),
+            downloaded: 100,
+            total: 100,
+            percentage: 100.0,
+        };
+        let _ = self
+            .app_handle
+            .emit("model-download-progress", &final_progress);
+        let _ = self.app_handle.emit("model-download-complete", model_id);
+
+        Ok(())
+    }
+
     pub fn delete_model(&self, model_id: &str) -> Result<()> {
         debug!("ModelManager: delete_model called for: {}", model_id);
 
@@ -758,6 +985,16 @@ impl ModelManager {
         if model_info.is_directory {
             // For directory-based models, ensure the directory exists and is complete
             if model_path.exists() && model_path.is_dir() && !partial_path.exists() {
+                if model_id == "sense-voice-int8"
+                    && !SENSE_VOICE_REQUIRED_FILES
+                        .iter()
+                        .all(|file| model_path.join(file).exists())
+                {
+                    return Err(anyhow::anyhow!(
+                        "Complete SenseVoice model files not found: {}",
+                        model_id
+                    ));
+                }
                 Ok(model_path)
             } else {
                 Err(anyhow::anyhow!(

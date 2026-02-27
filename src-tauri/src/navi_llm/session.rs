@@ -514,9 +514,7 @@ impl<'a> ManagedSession<'a> {
         }
     }
 
-    /// 清除对话历史（保留 system prompt）
-    ///
-    /// 注意：这会重置 KV Cache
+    /// 清除对话历史（保留 system prompt 及对应 KV Cache）
     pub fn clear(&mut self) {
         let system = self
             .messages
@@ -525,15 +523,29 @@ impl<'a> ManagedSession<'a> {
             .cloned();
 
         self.messages.clear();
+
+        let mut target_len = 0;
+
         if let Some(s) = system {
             self.messages.push(s);
+            if let Ok(prompt) = self.build_prompt() {
+                if let Ok(sys_tokens) = self
+                    .model
+                    .str_to_token(&prompt, llama_cpp_2::model::AddBos::Never)
+                {
+                    target_len = self.find_common_prefix(&sys_tokens);
+                }
+            }
         }
 
-        // 重置 KV Cache 状态
-        self.n_past = 0;
-        self.encoded_tokens.clear();
+        self.n_past = target_len as i32;
+        self.encoded_tokens.truncate(target_len);
+        let _ = self
+            .ctx
+            .clear_kv_cache_seq(None, Some(target_len as u32), None);
+
         self.stats.turn_count = 0;
-        self.stats.tokens_used = 0;
+        self.stats.tokens_used = self.n_past;
     }
 
     /// 完全重置会话（包括 system prompt）
