@@ -1,4 +1,4 @@
-use handy_app_lib::navi_llm::{LlmConfig, LlmModel};
+use speechless_app_lib::navi_llm::{LlmConfig, LlmModel};
 use std::io::{self, Write};
 use std::path::PathBuf;
 
