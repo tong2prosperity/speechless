@@ -18,6 +18,7 @@ use serde::Serialize;
 use specta::Type;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
+use std::sync::Arc;
 
 use crate::settings::{
     self, get_settings, AutoSubmitKey, ClipboardHandling, KeyboardImplementation, LLMPrompt,
@@ -389,11 +390,6 @@ fn register_all_shortcuts_for_implementation(
     for (id, default_binding) in &default_bindings {
         // Skip cancel shortcut as it's dynamically registered
         if id == "cancel" {
-            continue;
-        }
-
-        // Skip post-processing shortcut when the feature is disabled
-        if id == "transcribe_with_post_process" && !current_settings.post_process_enabled {
             continue;
         }
 
@@ -779,17 +775,42 @@ pub fn change_post_process_enabled_setting(app: AppHandle, enabled: bool) -> Res
     settings.post_process_enabled = enabled;
     settings::write_settings(&app, settings.clone());
 
-    // Register or unregister the post-processing shortcut
-    if let Some(binding) = settings
-        .bindings
-        .get("transcribe_with_post_process")
-        .cloned()
-    {
-        if enabled {
-            let _ = register_shortcut(&app, binding);
-        } else {
-            let _ = unregister_shortcut(&app, binding);
+    let llm_manager = app.state::<Arc<crate::managers::llm_manager::LlmManager>>();
+    if enabled {
+        info!("Post-processing enabled, warming up local LLM if provider is navi_llm");
+        if settings.post_process_provider_id == "navi_llm" {
+            let gguf_path = llm_manager
+                .get_models_dir()
+                .join("Qwen3-4B-Instruct-2507-Q4_1.gguf");
+
+            if gguf_path.exists() {
+                let system_prompt = settings
+                    .default_post_process_prompt
+                    .replace("${output}", "")
+                    .trim()
+                    .to_string();
+                let system_prompt_opt = if system_prompt.is_empty() {
+                    None
+                } else {
+                    Some(system_prompt)
+                };
+
+                let lm = Arc::clone(&llm_manager);
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = lm.warmup(gguf_path, system_prompt_opt).await {
+                        error!("Failed to warm up local LLM: {}", e);
+                    }
+                });
+            }
         }
+    } else {
+        info!("Post-processing disabled, unloading local LLM");
+        let lm = Arc::clone(&llm_manager);
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = lm.unload().await {
+                error!("Failed to unload local LLM: {}", e);
+            }
+        });
     }
 
     Ok(())
@@ -900,11 +921,22 @@ pub fn add_post_process_prompt(
 
     let new_prompt = LLMPrompt {
         id: id.clone(),
-        name,
+        name: name.clone(),
         prompt,
     };
 
     settings.post_process_prompts.push(new_prompt.clone());
+
+    // Create a new binding for this prompt
+    let binding = ShortcutBinding {
+        id: id.clone(),
+        name: name.clone(),
+        description: format!("Trigger post-processing with prompt: {}", name),
+        default_binding: String::new(),
+        current_binding: String::new(),
+    };
+    settings.bindings.insert(id.clone(), binding);
+
     settings::write_settings(&app, settings);
 
     Ok(new_prompt)
@@ -951,6 +983,16 @@ pub fn delete_post_process_prompt(app: AppHandle, id: String) -> Result<(), Stri
     if settings.post_process_prompts.len() == original_len {
         return Err(format!("Prompt with id '{}' not found", id));
     }
+
+    // Unregister the shortcut if it had one bound
+    if let Some(binding) = settings.bindings.get(&id).cloned() {
+        if !binding.current_binding.is_empty() {
+            let _ = unregister_shortcut(&app, binding);
+        }
+    }
+
+    // Remove the associated binding
+    settings.bindings.remove(&id);
 
     // If the deleted prompt was selected, select the first one or None
     if settings.post_process_selected_prompt_id.as_ref() == Some(&id) {

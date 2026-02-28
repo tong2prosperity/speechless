@@ -4,7 +4,7 @@ export { AdvancedSettings } from "./advanced/AdvancedSettings";
 export { DebugSettings } from "./debug/DebugSettings";
 export { HistorySettings } from "./history/HistorySettings";
 export { AboutSettings } from "./about/AboutSettings";
-export { PostProcessingSettings } from "./post-processing/PostProcessingSettings";
+export { PromptsSettings } from "./prompts/PromptsSettings";
 export { ModelsSettings } from "./models/ModelsSettings";
 
 // Individual setting components
@@ -21,8 +21,7 @@ export { ShortcutInput } from "./ShortcutInput";
 export { TranslateToEnglish } from "./TranslateToEnglish";
 export { CustomWords } from "./CustomWords";
 export { PostProcessingToggle } from "./PostProcessingToggle";
-export { PostProcessingSettingsApi } from "./PostProcessingSettingsApi";
-export { PostProcessingSettingsPrompts } from "./PostProcessingSettingsPrompts";
+
 export { AppDataDirectory } from "./AppDataDirectory";
 export { ModelUnloadTimeoutSetting } from "./ModelUnloadTimeout";
 export { StartHidden } from "./StartHidden";

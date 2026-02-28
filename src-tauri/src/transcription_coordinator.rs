@@ -1,4 +1,4 @@
-use crate::actions::ACTION_MAP;
+use crate::actions::get_action;
 use crate::managers::audio::AudioRecordingManager;
 use log::{debug, error, warn};
 use std::sync::mpsc::{self, Sender};
@@ -38,7 +38,7 @@ pub struct TranscriptionCoordinator {
 }
 
 pub fn is_transcribe_binding(id: &str) -> bool {
-    id == "transcribe" || id == "transcribe_with_post_process"
+    id == "transcribe" || id.starts_with("prompt_")
 }
 
 impl TranscriptionCoordinator {
@@ -159,8 +159,8 @@ impl TranscriptionCoordinator {
 }
 
 fn start(app: &AppHandle, stage: &mut Stage, binding_id: &str, hotkey_string: &str) {
-    let Some(action) = ACTION_MAP.get(binding_id) else {
-        warn!("No action in ACTION_MAP for '{binding_id}'");
+    let Some(action) = get_action(binding_id) else {
+        warn!("No action for '{binding_id}'");
         return;
     };
     action.start(app, binding_id, hotkey_string);
@@ -175,8 +175,8 @@ fn start(app: &AppHandle, stage: &mut Stage, binding_id: &str, hotkey_string: &s
 }
 
 fn stop(app: &AppHandle, stage: &mut Stage, binding_id: &str, hotkey_string: &str) {
-    let Some(action) = ACTION_MAP.get(binding_id) else {
-        warn!("No action in ACTION_MAP for '{binding_id}'");
+    let Some(action) = get_action(binding_id) else {
+        warn!("No action for '{binding_id}'");
         return;
     };
     action.stop(app, binding_id, hotkey_string);

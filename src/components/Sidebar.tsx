@@ -10,7 +10,7 @@ import {
   HistorySettings,
   DebugSettings,
   AboutSettings,
-  PostProcessingSettings,
+  PromptsSettings,
   ModelsSettings,
 } from "./settings";
 
@@ -50,11 +50,11 @@ export const SECTIONS_CONFIG = {
     component: AdvancedSettings,
     enabled: () => true,
   },
-  postprocessing: {
-    labelKey: "sidebar.postProcessing",
+  prompts: {
+    labelKey: "sidebar.prompts",
     icon: Sparkles,
-    component: PostProcessingSettings,
-    enabled: (settings) => settings?.post_process_enabled ?? false,
+    component: PromptsSettings,
+    enabled: () => true,
   },
   history: {
     labelKey: "sidebar.history",

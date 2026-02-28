@@ -40,6 +40,7 @@ struct CompleteRequest {
 
 enum LlmWorkerCommand {
     Complete(CompleteRequest),
+    Warmup(PathBuf, Option<String>),
     Unload,
     Shutdown,
 }
@@ -234,14 +235,28 @@ impl LlmManager {
             .as_millis() as u64;
         self.last_activity.store(now_ms, Ordering::Relaxed);
     }
+
+    pub async fn warmup(&self, model_path: PathBuf, system_prompt: Option<String>) -> Result<()> {
+        self.worker_tx
+            .send(LlmWorkerCommand::Warmup(model_path, system_prompt))
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to send warmup command: {}", e))
+    }
+
+    pub async fn unload(&self) -> Result<()> {
+        self.worker_tx
+            .send(LlmWorkerCommand::Unload)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to send unload command: {}", e))
+    }
 }
 
 fn llm_worker_loop(mut rx: tokio::sync::mpsc::Receiver<LlmWorkerCommand>) {
-    let mut pending_complete: Option<CompleteRequest> = None;
+    let mut pending_cmd: Option<LlmWorkerCommand> = None;
 
     loop {
-        let initial = if let Some(req) = pending_complete.take() {
-            req
+        let initial_cmd = if let Some(cmd) = pending_cmd.take() {
+            cmd
         } else {
             loop {
                 let cmd = match rx.blocking_recv() {
@@ -249,29 +264,38 @@ fn llm_worker_loop(mut rx: tokio::sync::mpsc::Receiver<LlmWorkerCommand>) {
                     None => return,
                 };
                 match cmd {
-                    LlmWorkerCommand::Complete(req) => break req,
+                    LlmWorkerCommand::Complete(req) => break LlmWorkerCommand::Complete(req),
+                    LlmWorkerCommand::Warmup(path, sp) => break LlmWorkerCommand::Warmup(path, sp),
                     LlmWorkerCommand::Unload => {}
                     LlmWorkerCommand::Shutdown => return,
                 }
             }
         };
 
-        log::info!(
-            "[llm_worker] Loading local LLM from: {:?}",
-            initial.model_path
-        );
-        let mut config = LlmConfig::new(initial.model_path.clone());
-        if let Some(ref sp) = initial.system_prompt {
+        let (model_path, system_prompt) = match &initial_cmd {
+            LlmWorkerCommand::Complete(req) => (req.model_path.clone(), req.system_prompt.clone()),
+            LlmWorkerCommand::Warmup(path, sp) => (path.clone(), sp.clone()),
+            _ => unreachable!(),
+        };
+
+        log::info!("[llm_worker] Loading local LLM from: {:?}", model_path);
+        let mut config = LlmConfig::new(model_path);
+        if let Some(ref sp) = system_prompt {
             if !sp.is_empty() {
                 config = config.with_system_prompt(sp);
             }
         }
 
+        let active_model_path = config.model_path.clone();
+        let active_system_prompt = config.system_prompt.clone();
         match LlmSessionFactory::new(config) {
             Ok(factory) => match factory.create_session() {
                 Ok(mut session) => {
-                    let res = session.chat(&initial.user_query).map_err(|e| e.to_string());
-                    let _ = initial.responder.send(res);
+                    log::info!("[llm_worker] Session created");
+                    if let LlmWorkerCommand::Complete(req) = initial_cmd {
+                        let res = session.chat(&req.user_query).map_err(|e| e.to_string());
+                        let _ = req.responder.send(res);
+                    }
 
                     loop {
                         let cmd = match rx.blocking_recv() {
@@ -281,11 +305,11 @@ fn llm_worker_loop(mut rx: tokio::sync::mpsc::Receiver<LlmWorkerCommand>) {
 
                         match cmd {
                             LlmWorkerCommand::Complete(req) => {
-                                if req.model_path != initial.model_path
-                                    || req.system_prompt != initial.system_prompt
+                                if req.model_path != active_model_path
+                                    || req.system_prompt != active_system_prompt
                                 {
                                     log::info!("[llm_worker] Config changed, recreating session");
-                                    pending_complete = Some(req);
+                                    pending_cmd = Some(LlmWorkerCommand::Complete(req));
                                     break;
                                 }
 
@@ -293,6 +317,19 @@ fn llm_worker_loop(mut rx: tokio::sync::mpsc::Receiver<LlmWorkerCommand>) {
                                 session.clear();
                                 let res = session.chat(&req.user_query).map_err(|e| e.to_string());
                                 let _ = req.responder.send(res);
+                            }
+                            LlmWorkerCommand::Warmup(model_path, system_prompt) => {
+                                if model_path != active_model_path
+                                    || system_prompt != active_system_prompt
+                                {
+                                    log::info!(
+                                        "[llm_worker] Warmup config changed, recreating session"
+                                    );
+                                    pending_cmd =
+                                        Some(LlmWorkerCommand::Warmup(model_path, system_prompt));
+                                    break;
+                                }
+                                log::info!("[llm_worker] Already warmed up with same config");
                             }
                             LlmWorkerCommand::Unload => {
                                 log::info!("[llm_worker] Unloading local LLM session");
@@ -303,11 +340,15 @@ fn llm_worker_loop(mut rx: tokio::sync::mpsc::Receiver<LlmWorkerCommand>) {
                     }
                 }
                 Err(e) => {
-                    let _ = initial.responder.send(Err(e.to_string()));
+                    if let LlmWorkerCommand::Complete(req) = initial_cmd {
+                        let _ = req.responder.send(Err(e.to_string()));
+                    }
                 }
             },
             Err(e) => {
-                let _ = initial.responder.send(Err(e.to_string()));
+                if let LlmWorkerCommand::Complete(req) = initial_cmd {
+                    let _ = req.responder.send(Err(e.to_string()));
+                }
             }
         }
     }

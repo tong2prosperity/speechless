@@ -141,6 +141,16 @@ function App() {
     setOnboardingStep("done");
   };
 
+  useEffect(() => {
+    const handleSectionChange = (e: any) => {
+      if (e.detail) {
+        setCurrentSection(e.detail as SidebarSection);
+      }
+    };
+    window.addEventListener("change-section", handleSectionChange);
+    return () => window.removeEventListener("change-section", handleSectionChange);
+  }, []);
+
   // Still checking onboarding status
   if (onboardingStep === null) {
     return null;

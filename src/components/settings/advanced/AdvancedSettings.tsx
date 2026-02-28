@@ -11,12 +11,13 @@ import { PasteMethodSetting } from "../PasteMethod";
 import { TypingToolSetting } from "../TypingTool";
 import { ClipboardHandlingSetting } from "../ClipboardHandling";
 import { AutoSubmit } from "../AutoSubmit";
-import { PostProcessingToggle } from "../PostProcessingToggle";
+
 import { AppendTrailingSpace } from "../AppendTrailingSpace";
 import { HistoryLimit } from "../HistoryLimit";
 import { RecordingRetentionPeriodSelector } from "../RecordingRetentionPeriod";
 import { useSettings } from "../../../hooks/useSettings";
 import { KeyboardImplementationSelector } from "../debug/KeyboardImplementationSelector";
+import { SettingContainer, Button } from "../../ui";
 
 export const AdvancedSettings: React.FC = () => {
   const { t } = useTranslation();
@@ -53,11 +54,27 @@ export const AdvancedSettings: React.FC = () => {
       </SettingsGroup>
 
       <SettingsGroup title={t("settings.advanced.groups.experimental")}>
-        <PostProcessingToggle descriptionMode="tooltip" grouped={true} />
         <KeyboardImplementationSelector
           descriptionMode="tooltip"
           grouped={true}
         />
+        <SettingContainer
+          title={t("sidebar.prompts")}
+          description={t("settings.postProcessing.prompts.selectedPrompt.description")}
+          descriptionMode="tooltip"
+          layout="horizontal"
+          grouped={true}
+        >
+          <Button
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('change-section', { detail: 'prompts' }));
+            }}
+            variant="secondary"
+            size="md"
+          >
+            {t("common.open")}
+          </Button>
+        </SettingContainer>
       </SettingsGroup>
     </div>
   );

@@ -14,16 +14,16 @@ import { Button } from "../../ui/Button";
 import { ResetButton } from "../../ui/ResetButton";
 import { Input } from "../../ui/Input";
 
-import { ProviderSelect } from "../PostProcessingSettingsApi/ProviderSelect";
-import { BaseUrlField } from "../PostProcessingSettingsApi/BaseUrlField";
-import { ApiKeyField } from "../PostProcessingSettingsApi/ApiKeyField";
-import { ModelSelect } from "../PostProcessingSettingsApi/ModelSelect";
-import { usePostProcessProviderState } from "../PostProcessingSettingsApi/usePostProcessProviderState";
+import { ProviderSelect } from "../PromptsSettingsApi/ProviderSelect";
+import { BaseUrlField } from "../PromptsSettingsApi/BaseUrlField";
+import { ApiKeyField } from "../PromptsSettingsApi/ApiKeyField";
+import { ModelSelect } from "../PromptsSettingsApi/ModelSelect";
+import { usePostProcessProviderState } from "../PromptsSettingsApi/usePostProcessProviderState";
 import { ShortcutInput } from "../ShortcutInput";
 import { useSettings } from "../../../hooks/useSettings";
 import { LocalLlmUnloadTimeoutSetting } from "./LocalLlmUnloadTimeout";
 
-const PostProcessingSettingsApiComponent: React.FC = () => {
+const PromptsSettingsApiComponent: React.FC = () => {
   const { t } = useTranslation();
   const state = usePostProcessProviderState();
 
@@ -151,7 +151,7 @@ const PostProcessingSettingsApiComponent: React.FC = () => {
   );
 };
 
-const PostProcessingSettingsPromptsComponent: React.FC = () => {
+const PromptsSettingsPromptsComponent: React.FC = () => {
   const { t } = useTranslation();
   const { getSetting, updateSetting, isUpdating, refreshSettings } =
     useSettings();
@@ -330,6 +330,17 @@ const PostProcessingSettingsPromptsComponent: React.FC = () => {
               />
             </div>
 
+            <div className="space-y-2 flex flex-col">
+              <label className="text-sm font-semibold">
+                {t("settings.postProcessing.hotkey.title")}
+              </label>
+              <ShortcutInput
+                shortcutId={selectedPromptId}
+                descriptionMode="tooltip"
+                grouped={false}
+              />
+            </div>
+
             <div className="flex gap-2 pt-2">
               <Button
                 onClick={handleUpdatePrompt}
@@ -363,7 +374,7 @@ const PostProcessingSettingsPromptsComponent: React.FC = () => {
 
         {isCreating && (
           <div className="space-y-3">
-            <div className="space-y-2 block flex flex-col">
+            <div className="space-y-2 flex flex-col">
               <label className="text-sm font-semibold text-text">
                 {t("settings.postProcessing.prompts.promptLabel")}
               </label>
@@ -421,35 +432,27 @@ const PostProcessingSettingsPromptsComponent: React.FC = () => {
   );
 };
 
-export const PostProcessingSettingsApi = React.memo(
-  PostProcessingSettingsApiComponent,
+export const PromptsSettingsApi = React.memo(
+  PromptsSettingsApiComponent,
 );
-PostProcessingSettingsApi.displayName = "PostProcessingSettingsApi";
+PromptsSettingsApi.displayName = "PromptsSettingsApi";
 
-export const PostProcessingSettingsPrompts = React.memo(
-  PostProcessingSettingsPromptsComponent,
+export const PromptsSettingsList = React.memo(
+  PromptsSettingsPromptsComponent,
 );
-PostProcessingSettingsPrompts.displayName = "PostProcessingSettingsPrompts";
+PromptsSettingsList.displayName = "PromptsSettingsList";
 
-export const PostProcessingSettings: React.FC = () => {
+export const PromptsSettings: React.FC = () => {
   const { t } = useTranslation();
 
   return (
     <div className="max-w-3xl w-full mx-auto space-y-6">
-      <SettingsGroup title={t("settings.postProcessing.hotkey.title")}>
-        <ShortcutInput
-          shortcutId="transcribe_with_post_process"
-          descriptionMode="tooltip"
-          grouped={true}
-        />
+      <SettingsGroup title={t("settings.postProcessing.prompts.title")}>
+        <PromptsSettingsList />
       </SettingsGroup>
 
       <SettingsGroup title={t("settings.postProcessing.api.title")}>
-        <PostProcessingSettingsApi />
-      </SettingsGroup>
-
-      <SettingsGroup title={t("settings.postProcessing.prompts.title")}>
-        <PostProcessingSettingsPrompts />
+        <PromptsSettingsApi />
       </SettingsGroup>
     </div>
   );

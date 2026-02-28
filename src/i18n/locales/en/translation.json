@@ -11,7 +11,7 @@
     "general": "General",
     "models": "Models",
     "advanced": "Advanced",
-    "postProcessing": "Post Process",
+    "prompts": "Prompts",
     "history": "History",
     "debug": "Debug",
     "about": "About"
@@ -153,10 +153,6 @@
           "cancel": {
             "name": "Cancel Shortcut",
             "description": "The keyboard shortcut to cancel the current recording."
-          },
-          "transcribe_with_post_process": {
-            "name": "Post-Processing Hotkey",
-            "description": "Optional: A dedicated hotkey that always applies AI post-processing to your transcription."
           }
         },
         "errors": {
@@ -176,6 +172,14 @@
       "pushToTalk": {
         "label": "Push To Talk",
         "description": "Hold to record, release to stop"
+      },
+      "postProcessingToggle": {
+        "label": "AI Optimization (Post-process)",
+        "description": "When enabled, AI prompt processing will be applied automatically (local model will load/unload as needed)",
+        "defaultPrompt": {
+          "title": "Default Prompt",
+          "placeholder": "Write the default instructions to run after transcription. Example: Improve grammar and clarity for the following text."
+        }
       }
     },
     "models": {
@@ -321,7 +325,7 @@
       }
     },
     "postProcessing": {
-      "title": "Post Process",
+      "title": "Prompts",
       "hotkey": {
         "title": "Hotkey"
       },
@@ -445,10 +449,6 @@
       "clamshellMicrophone": {
         "title": "Clamshell Microphone",
         "description": "Microphone to use when laptop lid is closed"
-      },
-      "postProcessingToggle": {
-        "label": "Post Processing",
-        "description": "Enable AI-powered text refinement after transcription"
       },
       "muteWhileRecording": {
         "label": "Mute While Recording",

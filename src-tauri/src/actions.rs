@@ -37,9 +37,8 @@ pub trait ShortcutAction: Send + Sync {
     fn stop(&self, app: &AppHandle, binding_id: &str, shortcut_str: &str);
 }
 
-// Transcribe Action
 struct TranscribeAction {
-    post_process: bool,
+    force_post_process_prompt_id: Option<String>,
 }
 
 /// Field name for structured output JSON schema
@@ -60,6 +59,7 @@ async fn post_process_transcription(
     app: &AppHandle,
     settings: &AppSettings,
     transcription: &str,
+    prompt: &str,
 ) -> Option<String> {
     let provider = match settings.active_post_process_provider().cloned() {
         Some(provider) => provider,
@@ -73,32 +73,6 @@ async fn post_process_transcription(
     // navi_llm does not store a model name in post_process_models.
     if provider.id == "navi_llm" {
         debug!("[post-process] Provider selected: navi_llm (local inference)");
-
-        let selected_prompt_id = match &settings.post_process_selected_prompt_id {
-            Some(id) => id.clone(),
-            None => {
-                debug!("[post-process] navi_llm: skipped — no prompt selected");
-                return None;
-            }
-        };
-
-        let prompt = match settings
-            .post_process_prompts
-            .iter()
-            .find(|p| p.id == selected_prompt_id)
-        {
-            Some(p) => {
-                debug!("[post-process] navi_llm: using prompt '{}'", p.name);
-                p.prompt.clone()
-            }
-            None => {
-                debug!(
-                    "[post-process] navi_llm: skipped — prompt id '{}' not found",
-                    selected_prompt_id
-                );
-                return None;
-            }
-        };
 
         if prompt.trim().is_empty() {
             debug!("[post-process] navi_llm: skipped — prompt is empty");
@@ -179,29 +153,6 @@ async fn post_process_transcription(
         );
         return None;
     }
-
-    let selected_prompt_id = match &settings.post_process_selected_prompt_id {
-        Some(id) => id.clone(),
-        None => {
-            debug!("Post-processing skipped because no prompt is selected");
-            return None;
-        }
-    };
-
-    let prompt = match settings
-        .post_process_prompts
-        .iter()
-        .find(|prompt| prompt.id == selected_prompt_id)
-    {
-        Some(prompt) => prompt.prompt.clone(),
-        None => {
-            debug!(
-                "Post-processing skipped because prompt '{}' was not found",
-                selected_prompt_id
-            );
-            return None;
-        }
-    };
 
     if prompt.trim().is_empty() {
         debug!("Post-processing skipped because the selected prompt is empty");
@@ -509,7 +460,7 @@ impl ShortcutAction for TranscribeAction {
         play_feedback_sound(app, SoundType::Stop);
 
         let binding_id = binding_id.to_string(); // Clone binding_id for the async task
-        let post_process = self.post_process;
+        let force_post_process_prompt_id = self.force_post_process_prompt_id.clone();
 
         tauri::async_runtime::spawn(async move {
             let _guard = FinishGuard(ah.clone());
@@ -549,20 +500,33 @@ impl ShortcutAction for TranscribeAction {
                                 final_text = converted_text;
                             }
 
+                            let settings = get_settings(&ah);
+                            let mut post_process = false;
+                            let mut prompt_name = "(default_prompt)".to_string();
+                            let mut prompt_content = String::new();
+
+                            if let Some(ref pid) = force_post_process_prompt_id {
+                                // Triggered via specific prompt shortcut
+                                post_process = true;
+                                if let Some(p) =
+                                    settings.post_process_prompts.iter().find(|p| &p.id == pid)
+                                {
+                                    prompt_name = p.name.clone();
+                                    prompt_content = p.prompt.clone();
+                                }
+                            } else if settings.post_process_enabled {
+                                // Triggered via default transcribe shortcut, check if general post-processing is enabled
+                                post_process = true;
+                                prompt_name = "Default Post Process Prompt".to_string();
+                                prompt_content = settings.default_post_process_prompt.clone();
+                            }
+
                             // Then apply LLM post-processing if this is the post-process hotkey
                             // Uses final_text which may already have Chinese conversion applied
                             if post_process {
                                 let provider_id = settings
                                     .active_post_process_provider()
                                     .map(|p| p.id.as_str())
-                                    .unwrap_or("(none)");
-                                let prompt_name = settings
-                                    .post_process_selected_prompt_id
-                                    .as_deref()
-                                    .and_then(|id| {
-                                        settings.post_process_prompts.iter().find(|p| p.id == id)
-                                    })
-                                    .map(|p| p.name.as_str())
                                     .unwrap_or("(none)");
                                 log::info!(
                                     "[post-process] starting — provider='{}', prompt='{}', input {} chars",
@@ -572,7 +536,13 @@ impl ShortcutAction for TranscribeAction {
                             }
                             let pp_start = std::time::Instant::now();
                             let processed = if post_process {
-                                post_process_transcription(&ah, &settings, &final_text).await
+                                post_process_transcription(
+                                    &ah,
+                                    &settings,
+                                    &final_text,
+                                    &prompt_content,
+                                )
+                                .await
                             } else {
                                 None
                             };
@@ -585,16 +555,7 @@ impl ShortcutAction for TranscribeAction {
                                 post_processed_text = Some(processed_text.clone());
                                 final_text = processed_text;
 
-                                // Get the prompt that was used
-                                if let Some(prompt_id) = &settings.post_process_selected_prompt_id {
-                                    if let Some(prompt) = settings
-                                        .post_process_prompts
-                                        .iter()
-                                        .find(|p| &p.id == prompt_id)
-                                    {
-                                        post_process_prompt = Some(prompt.prompt.clone());
-                                    }
-                                }
+                                post_process_prompt = Some(prompt_content.clone());
                             } else if final_text != transcription {
                                 // Chinese conversion was applied but no LLM post-processing
                                 post_processed_text = Some(final_text.clone());
@@ -698,26 +659,22 @@ impl ShortcutAction for TestAction {
     }
 }
 
-// Static Action Map
-pub static ACTION_MAP: Lazy<HashMap<String, Arc<dyn ShortcutAction>>> = Lazy::new(|| {
-    let mut map = HashMap::new();
-    map.insert(
-        "transcribe".to_string(),
-        Arc::new(TranscribeAction {
-            post_process: false,
-        }) as Arc<dyn ShortcutAction>,
-    );
-    map.insert(
-        "transcribe_with_post_process".to_string(),
-        Arc::new(TranscribeAction { post_process: true }) as Arc<dyn ShortcutAction>,
-    );
-    map.insert(
-        "cancel".to_string(),
-        Arc::new(CancelAction) as Arc<dyn ShortcutAction>,
-    );
-    map.insert(
-        "test".to_string(),
-        Arc::new(TestAction) as Arc<dyn ShortcutAction>,
-    );
-    map
-});
+pub fn get_action(binding_id: &str) -> Option<Arc<dyn ShortcutAction>> {
+    if binding_id == "transcribe" {
+        return Some(Arc::new(TranscribeAction {
+            force_post_process_prompt_id: None,
+        }));
+    }
+    if binding_id.starts_with("prompt_") {
+        return Some(Arc::new(TranscribeAction {
+            force_post_process_prompt_id: Some(binding_id.to_string()),
+        }));
+    }
+    if binding_id == "cancel" {
+        return Some(Arc::new(CancelAction));
+    }
+    if binding_id == "test" {
+        return Some(Arc::new(TestAction));
+    }
+    None
+}

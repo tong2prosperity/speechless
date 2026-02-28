@@ -369,6 +369,8 @@ pub struct AppSettings {
     pub post_process_models: HashMap<String, String>,
     #[serde(default = "default_post_process_prompts")]
     pub post_process_prompts: Vec<LLMPrompt>,
+    #[serde(default = "default_default_post_process_prompt")]
+    pub default_post_process_prompt: String,
     #[serde(default)]
     pub post_process_selected_prompt_id: Option<String>,
     #[serde(default)]
@@ -601,12 +603,11 @@ fn default_post_process_models() -> HashMap<String, String> {
 }
 
 fn default_post_process_prompts() -> Vec<LLMPrompt> {
-    vec![LLMPrompt {
-        id: "default_improve_transcriptions".to_string(),
-        name: "Improve Transcriptions".to_string(),
-        //prompt: "Clean this transcript:\n1. Fix spelling, capitalization, and punctuation errors\n2. Convert number words to digits (twenty-five → 25, ten percent → 10%, five dollars → $5)\n3. Replace spoken punctuation with symbols (period → ., comma → ,, question mark → ?)\n4. Remove filler words (um, uh, like as filler)\n5. Keep the language in the original version (if it was french, keep it in french for example)\n\nPreserve exact meaning and word order. Do not paraphrase or reorder content.\n\nReturn only the cleaned transcript.\n\nTranscript:\n${output}".to_string(),
-        prompt: "你是 ASR 口语文本规整助手，严格执行以下规则：\n 最高不可突破准则：100% 完整保留用户的原始意图、全部关键信息，严禁任何增删、篡改、引申用户本意的行为；\n 精准剔除文本中所有无意义的口癖、语气填充词（嗯、啊、呃、哦、那个、就是说等）、重复冗余的口语内容；\n 修正口语化的断句混乱、语序颠倒问题，让语句通顺连贯、符合正常表达逻辑；\n 仅输出处理后的最终文本，不得添加任何额外解释、标注、话术.".to_string(),
-    }]
+    vec![]
+}
+
+fn default_default_post_process_prompt() -> String {
+    "您是 ASR 口语文本规整助手，严格执行以下规则：\n 最高不可突破准则：100% 完整保留用户的原始意图、全部关键信息，严禁任何增删、篡改、引申用户本意的行为；\n 精准剔除文本中所有无意义的口癖、语气填充词（嗯、啊、呃、哦、那个、就是说等）、重复冗余的口语内容；\n 修正口语化的断句混乱、语序颠倒问题，让语句通顺连贯、符合正常表达逻辑；\n 仅输出处理后的最终文本，不得添加任何额外解释、标注、话术。".to_string()
 }
 
 fn default_typing_tool() -> TypingTool {
@@ -692,26 +693,6 @@ pub fn get_default_settings() -> AppSettings {
             current_binding: default_shortcut.to_string(),
         },
     );
-    #[cfg(target_os = "windows")]
-    let default_post_process_shortcut = "ctrl+shift+space";
-    #[cfg(target_os = "macos")]
-    let default_post_process_shortcut = "option+shift+space";
-    #[cfg(target_os = "linux")]
-    let default_post_process_shortcut = "ctrl+shift+space";
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-    let default_post_process_shortcut = "alt+shift+space";
-
-    bindings.insert(
-        "transcribe_with_post_process".to_string(),
-        ShortcutBinding {
-            id: "transcribe_with_post_process".to_string(),
-            name: "Transcribe with Post-Processing".to_string(),
-            description: "Converts your speech into text and applies AI post-processing."
-                .to_string(),
-            default_binding: default_post_process_shortcut.to_string(),
-            current_binding: default_post_process_shortcut.to_string(),
-        },
-    );
     bindings.insert(
         "cancel".to_string(),
         ShortcutBinding {
@@ -758,6 +739,7 @@ pub fn get_default_settings() -> AppSettings {
         post_process_api_keys: default_post_process_api_keys(),
         post_process_models: default_post_process_models(),
         post_process_prompts: default_post_process_prompts(),
+        default_post_process_prompt: default_default_post_process_prompt(),
         post_process_selected_prompt_id: None,
         mute_while_recording: false,
         append_trailing_space: false,
