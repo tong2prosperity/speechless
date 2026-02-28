@@ -64,10 +64,17 @@ const RecordingOverlay: React.FC = () => {
 
   const getIcon = () => {
     if (state === "recording") {
-      return <MicrophoneIcon />;
-    } else {
-      return <TranscriptionIcon />;
+      return <MicrophoneIcon width={18} height={18} color="#111827" />;
     }
+    return <TranscriptionIcon width={18} height={18} color="#111827" />;
+  };
+
+  const getStateText = () => {
+    if (state === "recording") {
+      return t("overlay.recording", { defaultValue: "Listening..." });
+    }
+    if (state === "processing") return t("overlay.processing");
+    return t("overlay.transcribing");
   };
 
   return (
@@ -75,9 +82,15 @@ const RecordingOverlay: React.FC = () => {
       dir={direction}
       className={`recording-overlay ${isVisible ? "fade-in" : ""}`}
     >
-      <div className="overlay-left">{getIcon()}</div>
+      <div className="overlay-left">
+        <div className="state-icon">{getIcon()}</div>
+      </div>
 
       <div className="overlay-middle">
+        <div className="state-text">
+          <span className={`state-dot ${state === "recording" ? "active" : ""}`} />
+          <span>{getStateText()}</span>
+        </div>
         {state === "recording" && (
           <div className="bars-container">
             {levels.map((v, i) => (
@@ -93,24 +106,19 @@ const RecordingOverlay: React.FC = () => {
             ))}
           </div>
         )}
-        {state === "transcribing" && (
-          <div className="transcribing-text">{t("overlay.transcribing")}</div>
-        )}
-        {state === "processing" && (
-          <div className="transcribing-text">{t("overlay.processing")}</div>
-        )}
       </div>
 
       <div className="overlay-right">
         {state === "recording" && (
-          <div
+          <button
+            type="button"
             className="cancel-button"
             onClick={() => {
               commands.cancelOperation();
             }}
           >
-            <CancelIcon />
-          </div>
+            <CancelIcon width={18} height={18} color="#52525B" />
+          </button>
         )}
       </div>
     </div>

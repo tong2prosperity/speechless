@@ -11,7 +11,7 @@ import { LogDirectory } from "../debug";
 
 export const AboutSettings: React.FC = () => {
   const { t } = useTranslation();
-  const [version, setVersion] = useState("");
+  const [version, setVersion] = useState("0.0.2");
 
   useEffect(() => {
     const fetchVersion = async () => {
@@ -20,7 +20,7 @@ export const AboutSettings: React.FC = () => {
         setVersion(appVersion);
       } catch (error) {
         console.error("Failed to get app version:", error);
-        setVersion("0.1.2");
+        setVersion("0.0.2");
       }
     };
 

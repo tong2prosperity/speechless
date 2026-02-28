@@ -216,7 +216,7 @@ export const HandyKeysShortcutInput: React.FC<HandyKeysShortcutInputProps> = ({
         descriptionMode={descriptionMode}
         grouped={grouped}
       >
-        <div className="text-sm text-mid-gray">
+        <div className="text-sm text-zinc-500">
           {t("settings.general.shortcut.loading")}
         </div>
       </SettingContainer>
@@ -232,7 +232,7 @@ export const HandyKeysShortcutInput: React.FC<HandyKeysShortcutInputProps> = ({
         descriptionMode={descriptionMode}
         grouped={grouped}
       >
-        <div className="text-sm text-mid-gray">
+        <div className="text-sm text-zinc-500">
           {t("settings.general.shortcut.none")}
         </div>
       </SettingContainer>
@@ -248,7 +248,7 @@ export const HandyKeysShortcutInput: React.FC<HandyKeysShortcutInputProps> = ({
         descriptionMode={descriptionMode}
         grouped={grouped}
       >
-        <div className="text-sm text-mid-gray">
+        <div className="text-sm text-zinc-500">
           {t("settings.general.shortcut.none")}
         </div>
       </SettingContainer>
@@ -278,17 +278,18 @@ export const HandyKeysShortcutInput: React.FC<HandyKeysShortcutInputProps> = ({
         {isRecording ? (
           <div
             ref={shortcutRef}
-            className="px-2 py-1 text-sm font-semibold border border-logo-primary bg-logo-primary/30 rounded-md"
+            className="h-8 px-3 inline-flex items-center text-sm font-mono border border-zinc-900 bg-zinc-100 rounded-md text-zinc-900"
           >
             {formatCurrentKeys()}
           </div>
         ) : (
-          <div
-            className="px-2 py-1 text-sm font-semibold bg-mid-gray/10 border border-mid-gray/80 hover:bg-logo-primary/10 rounded-md cursor-pointer hover:border-logo-primary"
+          <button
+            type="button"
+            className="h-8 px-3 text-sm font-mono bg-white border border-zinc-300 rounded-md cursor-pointer text-zinc-900 hover:border-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-black"
             onClick={startRecording}
           >
             {formatKeyCombination(binding.current_binding, osType)}
-          </div>
+          </button>
         )}
         <ResetButton
           onClick={() => resetBinding(shortcutId)}

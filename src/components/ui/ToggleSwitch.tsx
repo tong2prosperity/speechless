@@ -24,6 +24,9 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
   grouped = false,
   tooltipPosition = "top",
 }) => {
+  const switchId = React.useId();
+  const isDisabled = disabled || isUpdating;
+
   return (
     <SettingContainer
       title={label}
@@ -33,24 +36,27 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
       disabled={disabled}
       tooltipPosition={tooltipPosition}
     >
-      <label
-        className={`inline-flex items-center ${disabled || isUpdating ? "cursor-not-allowed" : "cursor-pointer"}`}
-      >
+      <div className="relative inline-flex items-center w-10 h-5 align-middle select-none">
         <input
           type="checkbox"
-          value=""
-          className="sr-only peer"
+          name={switchId}
+          id={switchId}
           checked={checked}
-          disabled={disabled || isUpdating}
+          disabled={isDisabled}
           onChange={(e) => onChange(e.target.checked)}
+          className="sr-only peer"
         />
-        <div className="relative w-11 h-6 bg-mid-gray/20 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-logo-primary rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-background-ui peer-disabled:opacity-50"></div>
-      </label>
-      {isUpdating && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-4 h-4 border-2 border-logo-primary border-t-transparent rounded-full animate-spin"></div>
-        </div>
-      )}
+        <label
+          htmlFor={switchId}
+          className={`relative block h-5 w-10 rounded-full transition-colors duration-200 ${
+            checked ? "bg-zinc-900" : "bg-zinc-300"
+          } ${isDisabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+        >
+          <span
+            className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-all duration-200 ${checked ? "left-[22px]" : "left-0.5"}`}
+          />
+        </label>
+      </div>
     </SettingContainer>
   );
 };

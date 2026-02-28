@@ -1,9 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Cog, FlaskConical, History, Info, Sparkles, Cpu } from "lucide-react";
-import HandyTextLogo from "./icons/HandyTextLogo";
-import HandyHand from "./icons/HandyHand";
 import { useSettings } from "../hooks/useSettings";
+import logoImage from "@/assets/logo.jpeg";
 import {
   GeneralSettings,
   AdvancedSettings,
@@ -16,17 +14,9 @@ import {
 
 export type SidebarSection = keyof typeof SECTIONS_CONFIG;
 
-interface IconProps {
-  width?: number | string;
-  height?: number | string;
-  size?: number | string;
-  className?: string;
-  [key: string]: any;
-}
-
 interface SectionConfig {
   labelKey: string;
-  icon: React.ComponentType<IconProps>;
+  icon: string;
   component: React.ComponentType;
   enabled: (settings: any) => boolean;
 }
@@ -34,43 +24,43 @@ interface SectionConfig {
 export const SECTIONS_CONFIG = {
   general: {
     labelKey: "sidebar.general",
-    icon: HandyHand,
+    icon: "settings",
     component: GeneralSettings,
     enabled: () => true,
   },
   models: {
     labelKey: "sidebar.models",
-    icon: Cpu,
+    icon: "smart_toy",
     component: ModelsSettings,
     enabled: () => true,
   },
   advanced: {
     labelKey: "sidebar.advanced",
-    icon: Cog,
+    icon: "tune",
     component: AdvancedSettings,
     enabled: () => true,
   },
   prompts: {
     labelKey: "sidebar.prompts",
-    icon: Sparkles,
+    icon: "auto_awesome",
     component: PromptsSettings,
     enabled: () => true,
   },
   history: {
     labelKey: "sidebar.history",
-    icon: History,
+    icon: "history",
     component: HistorySettings,
     enabled: () => true,
   },
   debug: {
     labelKey: "sidebar.debug",
-    icon: FlaskConical,
+    icon: "flask_conical",
     component: DebugSettings,
     enabled: (settings) => settings?.debug_mode ?? false,
   },
   about: {
     labelKey: "sidebar.about",
-    icon: Info,
+    icon: "info",
     component: AboutSettings,
     enabled: () => true,
   },
@@ -87,40 +77,69 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { t } = useTranslation();
   const { settings } = useSettings();
+  const showAccountUi = false;
 
   const availableSections = Object.entries(SECTIONS_CONFIG)
     .filter(([_, config]) => config.enabled(settings))
     .map(([id, config]) => ({ id: id as SidebarSection, ...config }));
 
   return (
-    <div className="flex flex-col w-40 h-full border-e border-mid-gray/20 items-center px-2">
-      <HandyTextLogo width={120} className="m-4" />
-      <div className="flex flex-col w-full items-center gap-1 pt-2 border-t border-mid-gray/20">
+    <nav className="w-64 bg-zinc-50 border-r border-zinc-200 flex flex-col flex-shrink-0 h-full text-base">
+      <div className="p-5 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-md overflow-hidden border border-zinc-200 bg-white flex items-center justify-center">
+          <img
+            src={logoImage}
+            alt="Speechless logo"
+            className="w-full h-full object-cover"
+          />
+        </div>
+        <h1 className="font-semibold text-base tracking-tight text-zinc-900">
+          Speechless
+        </h1>
+      </div>
+
+      <div className="px-3 py-2 space-y-0.5 flex-1 overflow-y-auto">
         {availableSections.map((section) => {
-          const Icon = section.icon;
           const isActive = activeSection === section.id;
 
           return (
-            <div
+            <button
               key={section.id}
-              className={`flex gap-2 items-center p-2 w-full rounded-lg cursor-pointer transition-colors ${
+              className={`w-full flex items-center gap-3 px-3 py-2 text-base rounded-md transition-colors group cursor-pointer ${
                 isActive
-                  ? "bg-logo-primary/80"
-                  : "hover:bg-mid-gray/20 hover:opacity-100 opacity-85"
+                  ? "bg-zinc-100 text-zinc-900 font-medium"
+                  : "text-zinc-600 hover:bg-zinc-100"
               }`}
               onClick={() => onSectionChange(section.id)}
             >
-              <Icon width={24} height={24} className="shrink-0" />
-              <p
-                className="text-sm font-medium truncate"
-                title={t(section.labelKey)}
+              <span
+                className={`material-symbols-outlined text-[18px] transition-colors ${
+                  isActive
+                    ? "text-zinc-900"
+                    : "text-zinc-400 group-hover:text-zinc-900"
+                }`}
               >
-                {t(section.labelKey)}
-              </p>
-            </div>
+                {section.icon}
+              </span>
+              {t(section.labelKey)}
+            </button>
           );
         })}
       </div>
-    </div>
+
+      {showAccountUi && (
+        <div className="p-4 border-t border-zinc-200">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded bg-zinc-200 flex items-center justify-center text-sm font-medium text-zinc-600">
+              JD
+            </div>
+            <div className="text-sm">
+              <div className="font-medium text-zinc-900">John Doe</div>
+              <div className="text-zinc-500">Pro Plan</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </nav>
   );
 };

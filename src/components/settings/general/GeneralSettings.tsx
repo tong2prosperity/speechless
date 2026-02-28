@@ -15,50 +15,73 @@ import { SettingContainer, Textarea } from "../../ui";
 
 export const GeneralSettings: React.FC = () => {
   const { t } = useTranslation();
-  const { audioFeedbackEnabled, getSetting, updateSetting, isUpdating } = useSettings();
-  
+  const { audioFeedbackEnabled, getSetting, updateSetting, isUpdating } =
+    useSettings();
+
   const postProcessEnabled = getSetting("post_process_enabled") || false;
   const defaultPrompt = getSetting("default_post_process_prompt") || "";
+
   return (
-    <div className="max-w-3xl w-full mx-auto space-y-6">
-      <SettingsGroup title={t("settings.general.title")}>
-        <ShortcutInput shortcutId="transcribe" grouped={true} />
-        <PushToTalk descriptionMode="tooltip" grouped={true} />
-        <PostProcessingToggle descriptionMode="tooltip" grouped={true} />
-        {postProcessEnabled && (
-          <SettingContainer
-            title={t("settings.general.postProcessingToggle.defaultPrompt.title")}
-            description={t("settings.general.postProcessingToggle.defaultPrompt.placeholder")}
+    <div className="space-y-6">
+      <div className="mb-8">
+        <h2 className="text-2xl font-semibold text-zinc-950 tracking-tight">
+          {t("settings.general.title")}
+        </h2>
+        <p className="text-base text-zinc-500 mt-1">
+          {t("settings.general.description") ||
+            "Manage core application behavior and audio hardware preferences."}
+        </p>
+      </div>
+
+      <div className="space-y-6">
+        <SettingsGroup title={t("settings.general.group.general") || "General"}>
+          <ShortcutInput shortcutId="transcribe" grouped={true} />
+          <PushToTalk descriptionMode="tooltip" grouped={true} />
+          <PostProcessingToggle descriptionMode="tooltip" grouped={true} />
+          {postProcessEnabled && (
+            <SettingContainer
+              title={t(
+                "settings.general.postProcessingToggle.defaultPrompt.title",
+              )}
+              description={t(
+                "settings.general.postProcessingToggle.defaultPrompt.placeholder",
+              )}
+              descriptionMode="tooltip"
+              layout="stacked"
+              grouped={true}
+            >
+              <div className="space-y-2 flex flex-col">
+                <Textarea
+                  value={defaultPrompt as string}
+                  onChange={(e) =>
+                    updateSetting("default_post_process_prompt", e.target.value)
+                  }
+                  disabled={isUpdating("default_post_process_prompt")}
+                  placeholder={t(
+                    "settings.general.postProcessingToggle.defaultPrompt.placeholder",
+                  )}
+                  className="w-full text-sm border border-zinc-200 rounded-md p-3 focus:ring-1 focus:ring-black focus:border-black transition-shadow"
+                  rows={4}
+                />
+              </div>
+            </SettingContainer>
+          )}
+        </SettingsGroup>
+
+        <ModelSettingsCard />
+
+        <SettingsGroup title={t("settings.sound.title")}>
+          <MicrophoneSelector descriptionMode="tooltip" grouped={true} />
+          <MuteWhileRecording descriptionMode="tooltip" grouped={true} />
+          <AudioFeedback descriptionMode="tooltip" grouped={true} />
+          <OutputDeviceSelector
             descriptionMode="tooltip"
-            layout="stacked"
             grouped={true}
-          >
-            <div className="space-y-2 flex flex-col">
-              <Textarea
-                value={defaultPrompt as string}
-                onChange={(e) => updateSetting("default_post_process_prompt", e.target.value)}
-                disabled={isUpdating("default_post_process_prompt")}
-                placeholder={t(
-                  "settings.general.postProcessingToggle.defaultPrompt.placeholder",
-                )}
-                rows={4}
-              />
-            </div>
-          </SettingContainer>
-        )}
-      </SettingsGroup>
-      <ModelSettingsCard />
-      <SettingsGroup title={t("settings.sound.title")}>
-        <MicrophoneSelector descriptionMode="tooltip" grouped={true} />
-        <MuteWhileRecording descriptionMode="tooltip" grouped={true} />
-        <AudioFeedback descriptionMode="tooltip" grouped={true} />
-        <OutputDeviceSelector
-          descriptionMode="tooltip"
-          grouped={true}
-          disabled={!audioFeedbackEnabled}
-        />
-        <VolumeSlider disabled={!audioFeedbackEnabled} />
-      </SettingsGroup>
+            disabled={!audioFeedbackEnabled}
+          />
+          <VolumeSlider disabled={!audioFeedbackEnabled} />
+        </SettingsGroup>
+      </div>
     </div>
   );
 };

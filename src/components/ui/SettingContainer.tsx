@@ -47,148 +47,84 @@ export const SettingContainer: React.FC<SettingContainerProps> = ({
     setShowTooltip(!showTooltip);
   };
 
-  const containerClasses = grouped
-    ? "px-4 p-2"
-    : "px-4 p-2 rounded-lg border border-mid-gray/20";
+  const containerClasses = `px-5 py-4 flex items-center justify-between gap-4 transition-colors ${
+    disabled ? "opacity-50" : "hover:bg-zinc-50"
+  }`;
 
   if (layout === "stacked") {
-    if (descriptionMode === "tooltip") {
-      return (
-        <div className={containerClasses}>
-          <div className="flex items-center gap-2 mb-2">
-            <h3
-              className={`text-sm font-medium ${disabled ? "opacity-50" : ""}`}
-            >
-              {title}
-            </h3>
-            <div
-              ref={tooltipRef}
-              className="relative"
-              onMouseEnter={() => setShowTooltip(true)}
-              onMouseLeave={() => setShowTooltip(false)}
-              onClick={toggleTooltip}
-            >
-              <svg
-                className="w-4 h-4 text-mid-gray cursor-help hover:text-logo-primary transition-colors duration-200 select-none"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-label="More information"
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    toggleTooltip();
-                  }
-                }}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              {showTooltip && (
-                <Tooltip targetRef={tooltipRef} position="top">
-                  <p className="text-sm text-center leading-relaxed">
-                    {description}
-                  </p>
-                </Tooltip>
-              )}
-            </div>
-          </div>
-          <div className="w-full">{children}</div>
-        </div>
-      );
-    }
-
     return (
-      <div className={containerClasses}>
-        <div className="mb-2">
-          <h3 className={`text-sm font-medium ${disabled ? "opacity-50" : ""}`}>
-            {title}
-          </h3>
-          <p className={`text-sm ${disabled ? "opacity-50" : ""}`}>
-            {description}
-          </p>
+      <div
+        className={`px-5 py-4 block transition-colors ${disabled ? "opacity-50" : "hover:bg-zinc-50"}`}
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <h3 className="text-base font-medium text-zinc-900">{title}</h3>
+          <div
+            ref={tooltipRef}
+            className="relative flex items-center"
+            onMouseEnter={() => setShowTooltip(true)}
+            onMouseLeave={() => setShowTooltip(false)}
+            onClick={toggleTooltip}
+          >
+            <span
+              className="material-symbols-outlined text-[16px] text-zinc-400 cursor-help hover:text-zinc-900 transition-colors"
+              title={descriptionMode === "tooltip" ? "" : description}
+            >
+              info
+            </span>
+            {showTooltip && descriptionMode === "tooltip" && (
+              <Tooltip targetRef={tooltipRef} position="top">
+                <p className="text-sm text-center leading-relaxed text-zinc-700">
+                  {description}
+                </p>
+              </Tooltip>
+            )}
+          </div>
         </div>
+        {descriptionMode === "inline" && (
+          <p className="mb-3 text-sm text-zinc-500">{description}</p>
+        )}
         <div className="w-full">{children}</div>
       </div>
     );
   }
 
   // Horizontal layout (default)
-  const horizontalContainerClasses = grouped
-    ? "flex items-center justify-between px-4 p-2"
-    : "flex items-center justify-between px-4 p-2 rounded-lg border border-mid-gray/20";
-
-  if (descriptionMode === "tooltip") {
-    return (
-      <div className={horizontalContainerClasses}>
-        <div className="max-w-2/3">
-          <div className="flex items-center gap-2">
-            <h3
-              className={`text-sm font-medium ${disabled ? "opacity-50" : ""}`}
+  return (
+    <div className={containerClasses}>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span
+            className={`text-base font-medium ${disabled ? "text-zinc-400" : "text-zinc-900"}`}
+          >
+            {title}
+          </span>
+          <div
+            ref={tooltipRef}
+            className="relative flex items-center"
+            onMouseEnter={() => setShowTooltip(true)}
+            onMouseLeave={() => setShowTooltip(false)}
+            onClick={toggleTooltip}
+          >
+            <span
+              className="material-symbols-outlined text-[16px] text-zinc-400 cursor-help hover:text-zinc-900 transition-colors"
+              title={descriptionMode === "tooltip" ? "" : description}
             >
-              {title}
-            </h3>
-            <div
-              ref={tooltipRef}
-              className="relative"
-              onMouseEnter={() => setShowTooltip(true)}
-              onMouseLeave={() => setShowTooltip(false)}
-              onClick={toggleTooltip}
-            >
-              <svg
-                className="w-4 h-4 text-mid-gray cursor-help hover:text-logo-primary transition-colors duration-200 select-none"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-label="More information"
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    toggleTooltip();
-                  }
-                }}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              {showTooltip && (
-                <Tooltip targetRef={tooltipRef} position={tooltipPosition}>
-                  <p className="text-sm text-center leading-relaxed">
-                    {description}
-                  </p>
-                </Tooltip>
-              )}
-            </div>
+              info
+            </span>
+            {showTooltip && descriptionMode === "tooltip" && (
+              <Tooltip targetRef={tooltipRef} position={tooltipPosition}>
+                <p className="text-sm text-center leading-relaxed text-zinc-700">
+                  {description}
+                </p>
+              </Tooltip>
+            )}
           </div>
         </div>
-        <div className="relative">{children}</div>
+        {descriptionMode === "inline" && (
+          <p className="mt-1 text-sm text-zinc-500">{description}</p>
+        )}
       </div>
-    );
-  }
-
-  return (
-    <div className={horizontalContainerClasses}>
-      <div className="max-w-2/3">
-        <h3 className={`text-sm font-medium ${disabled ? "opacity-50" : ""}`}>
-          {title}
-        </h3>
-        <p className={`text-sm ${disabled ? "opacity-50" : ""}`}>
-          {description}
-        </p>
-      </div>
-      <div className="relative">{children}</div>
+      <div className="relative flex-shrink-0">{children}</div>
     </div>
   );
 };

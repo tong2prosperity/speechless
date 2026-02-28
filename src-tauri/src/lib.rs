@@ -36,7 +36,6 @@ use signal_hook::consts::{SIGUSR1, SIGUSR2};
 use signal_hook::iterator::Signals;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
-use tauri::image::Image;
 pub use transcription_coordinator::TranscriptionCoordinator;
 
 use tauri::tray::TrayIconBuilder;
@@ -153,22 +152,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
             let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
         }
     }
-    // Get the current theme to set the appropriate initial icon
-    let initial_theme = tray::get_current_theme(app_handle);
-
-    // Choose the appropriate initial icon based on theme
-    let initial_icon_path = tray::get_icon_path(initial_theme, tray::TrayIconState::Idle);
-
-    let tray = TrayIconBuilder::new()
-        .icon(
-            Image::from_path(
-                app_handle
-                    .path()
-                    .resolve(initial_icon_path, tauri::path::BaseDirectory::Resource)
-                    .unwrap(),
-            )
-            .unwrap(),
-        )
+    let mut tray_builder = TrayIconBuilder::new()
         .show_menu_on_left_click(true)
         .icon_as_template(true)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -206,7 +190,15 @@ fn initialize_core_logic(app_handle: &AppHandle) {
                 app.exit(0);
             }
             _ => {}
-        })
+        });
+
+    if let Some(initial_icon) = tray::load_tray_icon_image(app_handle, tray::TrayIconState::Idle) {
+        tray_builder = tray_builder.icon(initial_icon);
+    } else {
+        log::warn!("Tray icon could not be loaded during startup; using platform default icon.");
+    }
+
+    let tray = tray_builder
         .build(app_handle)
         .unwrap();
     app_handle.manage(tray);

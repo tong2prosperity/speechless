@@ -155,6 +155,7 @@
       "availableModels": "可供下载"
     },
     "general": {
+      "description": "管理核心应用行为和音频硬件偏好设置。",
       "title": "通用",
       "shortcut": {
         "title": "Handy 快捷键",
@@ -178,6 +179,9 @@
           "set": "无法设置快捷键: {{error}}",
           "reset": "无法将快捷键重置为原始值"
         }
+      },
+      "group": {
+        "general": "通用"
       },
       "language": {
         "title": "语言",

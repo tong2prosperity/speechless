@@ -148,7 +148,8 @@ function App() {
       }
     };
     window.addEventListener("change-section", handleSectionChange);
-    return () => window.removeEventListener("change-section", handleSectionChange);
+    return () =>
+      window.removeEventListener("change-section", handleSectionChange);
   }, []);
 
   // Still checking onboarding status
@@ -167,7 +168,7 @@ function App() {
   return (
     <div
       dir={direction}
-      className="h-screen flex flex-col select-none cursor-default"
+      className="h-screen flex flex-col overflow-hidden text-zinc-950 select-none cursor-default"
     >
       <Toaster
         theme="system"
@@ -175,27 +176,25 @@ function App() {
           unstyled: true,
           classNames: {
             toast:
-              "bg-background border border-mid-gray/20 rounded-lg shadow-lg px-4 py-3 flex items-center gap-3 text-sm",
-            title: "font-medium",
-            description: "text-mid-gray",
+              "bg-white border border-zinc-200 rounded-lg shadow-lg px-4 py-3 flex items-center gap-3 text-sm",
+            title: "font-medium text-zinc-900",
+            description: "text-zinc-500",
           },
         }}
       />
       {/* Main content area that takes remaining space */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex flex-1 overflow-hidden">
         <Sidebar
           activeSection={currentSection}
           onSectionChange={setCurrentSection}
         />
         {/* Scrollable content area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto">
-            <div className="flex flex-col items-center p-4 gap-4">
-              <AccessibilityPermissions />
-              {renderSettingsContent(currentSection)}
-            </div>
+        <main className="flex-1 overflow-y-auto bg-white">
+          <div className="max-w-3xl mx-auto px-8 py-10 text-base">
+            <AccessibilityPermissions />
+            {renderSettingsContent(currentSection)}
           </div>
-        </div>
+        </main>
       </div>
       {/* Fixed footer at bottom */}
       <Footer />

@@ -45,36 +45,57 @@ pub fn get_current_theme(app: &AppHandle) -> AppTheme {
 
 /// Gets the appropriate icon path for the given theme and state
 pub fn get_icon_path(theme: AppTheme, state: TrayIconState) -> &'static str {
-    match (theme, state) {
-        // Dark theme uses light icons
-        (AppTheme::Dark, TrayIconState::Idle) => "resources/tray_idle.png",
-        (AppTheme::Dark, TrayIconState::Recording) => "resources/tray_recording.png",
-        (AppTheme::Dark, TrayIconState::Transcribing) => "resources/tray_transcribing.png",
-        // Light theme uses dark icons
-        (AppTheme::Light, TrayIconState::Idle) => "resources/tray_idle_dark.png",
-        (AppTheme::Light, TrayIconState::Recording) => "resources/tray_recording_dark.png",
-        (AppTheme::Light, TrayIconState::Transcribing) => "resources/tray_transcribing_dark.png",
-        // Colored theme uses pink icons (for Linux)
-        (AppTheme::Colored, TrayIconState::Idle) => "resources/handy.png",
-        (AppTheme::Colored, TrayIconState::Recording) => "resources/recording.png",
-        (AppTheme::Colored, TrayIconState::Transcribing) => "resources/transcribing.png",
+    let _ = (theme, state);
+    "resources/icon.png"
+}
+
+pub fn load_tray_icon_image(app: &AppHandle, state: TrayIconState) -> Option<Image<'static>> {
+    let theme = get_current_theme(app);
+    let primary = get_icon_path(theme, state);
+    let candidates = [
+        primary,
+        "icon.png",
+        "resources/icon.svg",
+        "icon.svg",
+        "resources/tray_idle.png",
+        "tray_idle.png",
+    ];
+
+    for candidate in candidates {
+        let resolved = match app
+            .path()
+            .resolve(candidate, tauri::path::BaseDirectory::Resource)
+        {
+            Ok(path) => path,
+            Err(err) => {
+                warn!("Failed to resolve tray icon path '{}': {}", candidate, err);
+                continue;
+            }
+        };
+
+        match Image::from_path(&resolved) {
+            Ok(image) => return Some(image),
+            Err(err) => {
+                warn!(
+                    "Failed to load tray icon from '{}': {}",
+                    resolved.display(),
+                    err
+                );
+            }
+        }
     }
+
+    None
 }
 
 pub fn change_tray_icon(app: &AppHandle, icon: TrayIconState) {
     let tray = app.state::<TrayIcon>();
-    let theme = get_current_theme(app);
 
-    let icon_path = get_icon_path(theme, icon.clone());
-
-    let _ = tray.set_icon(Some(
-        Image::from_path(
-            app.path()
-                .resolve(icon_path, tauri::path::BaseDirectory::Resource)
-                .expect("failed to resolve"),
-        )
-        .expect("failed to set icon"),
-    ));
+    if let Some(image) = load_tray_icon_image(app, icon.clone()) {
+        let _ = tray.set_icon(Some(image));
+    } else {
+        warn!("Tray icon image not found; keeping existing tray icon.");
+    }
 
     // Update menu based on state
     update_tray_menu(app, &icon, None);
