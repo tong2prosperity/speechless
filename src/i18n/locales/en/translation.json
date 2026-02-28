@@ -374,9 +374,10 @@
       },
       "prompts": {
         "title": "Prompt",
-        "selectedPrompt": {
-          "title": "Selected Prompt",
-          "description": "Select a template for refining transcriptions or create a new one. Use ${output} inside the prompt text to reference the captured transcript."
+        "shortcuts": {
+          "title": "Prompt Shortcuts",
+          "description": "Manage dedicated shortcuts that run specific post-processing prompts. The default prompt is configured in General settings.",
+          "flowHint": "Default transcription uses the General default prompt. Prompts in this section only run when their own shortcut is triggered."
         },
         "noPrompts": "No prompts available",
         "selectPrompt": "Select a prompt",
@@ -389,6 +390,7 @@
         "updatePrompt": "Update Prompt",
         "deletePrompt": "Delete Prompt",
         "createPrompt": "Create Prompt",
+        "createHotkeyHint": "Click and press keys to set a hotkey for this prompt.",
         "cancel": "Cancel",
         "selectToEdit": "Select a prompt above to view and edit its details.",
         "createFirst": "Click 'Create New Prompt' above to create your first post-processing prompt."

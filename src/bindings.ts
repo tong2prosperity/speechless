@@ -224,6 +224,14 @@ async addPostProcessPrompt(name: string, prompt: string) : Promise<Result<LLMPro
     else return { status: "error", error: e  as any };
 }
 },
+async addPostProcessPromptWithBinding(name: string, prompt: string, binding: string) : Promise<Result<LLMPrompt, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("add_post_process_prompt_with_binding", { name, prompt, binding }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async updatePostProcessPrompt(id: string, name: string, prompt: string) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("update_post_process_prompt", { id, name, prompt }) };

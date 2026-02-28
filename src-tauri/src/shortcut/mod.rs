@@ -944,6 +944,56 @@ pub fn add_post_process_prompt(
 
 #[tauri::command]
 #[specta::specta]
+pub fn add_post_process_prompt_with_binding(
+    app: AppHandle,
+    name: String,
+    prompt: String,
+    binding: String,
+) -> Result<LLMPrompt, String> {
+    if name.trim().is_empty() {
+        return Err("Prompt name cannot be empty".to_string());
+    }
+    if prompt.trim().is_empty() {
+        return Err("Prompt content cannot be empty".to_string());
+    }
+    if binding.trim().is_empty() {
+        return Err("Binding cannot be empty".to_string());
+    }
+
+    let settings = settings::get_settings(&app);
+    validate_shortcut_for_implementation(&binding, settings.keyboard_implementation)?;
+
+    // Generate unique ID using timestamp and random component
+    let id = format!("prompt_{}", chrono::Utc::now().timestamp_millis());
+
+    let new_prompt = LLMPrompt {
+        id: id.clone(),
+        name: name.trim().to_string(),
+        prompt: prompt.trim().to_string(),
+    };
+
+    let prompt_binding = ShortcutBinding {
+        id: id.clone(),
+        name: name.trim().to_string(),
+        description: format!("Trigger post-processing with prompt: {}", name.trim()),
+        // Keep reset behavior intuitive: reset returns to the initial user-selected hotkey.
+        default_binding: binding.trim().to_string(),
+        current_binding: binding.trim().to_string(),
+    };
+
+    // Register first so we can fail atomically before persisting settings.
+    register_shortcut(&app, prompt_binding.clone())?;
+
+    let mut updated_settings = settings;
+    updated_settings.post_process_prompts.push(new_prompt.clone());
+    updated_settings.bindings.insert(id, prompt_binding);
+    settings::write_settings(&app, updated_settings);
+
+    Ok(new_prompt)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn update_post_process_prompt(
     app: AppHandle,
     id: String,
@@ -951,14 +1001,30 @@ pub fn update_post_process_prompt(
     prompt: String,
 ) -> Result<(), String> {
     let mut settings = settings::get_settings(&app);
+    let normalized_name = name.trim().to_string();
+    let normalized_prompt = prompt.trim().to_string();
+
+    if normalized_name.is_empty() {
+        return Err("Prompt name cannot be empty".to_string());
+    }
+    if normalized_prompt.is_empty() {
+        return Err("Prompt content cannot be empty".to_string());
+    }
 
     if let Some(existing_prompt) = settings
         .post_process_prompts
         .iter_mut()
         .find(|p| p.id == id)
     {
-        existing_prompt.name = name;
-        existing_prompt.prompt = prompt;
+        existing_prompt.name = normalized_name.clone();
+        existing_prompt.prompt = normalized_prompt;
+
+        if let Some(existing_binding) = settings.bindings.get_mut(&id) {
+            existing_binding.name = normalized_name.clone();
+            existing_binding.description =
+                format!("Trigger post-processing with prompt: {}", normalized_name);
+        }
+
         settings::write_settings(&app, settings);
         Ok(())
     } else {

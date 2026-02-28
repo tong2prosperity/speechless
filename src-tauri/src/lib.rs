@@ -289,6 +289,7 @@ pub fn run(cli_args: CliArgs) {
         shortcut::set_post_process_provider,
         shortcut::fetch_post_process_models,
         shortcut::add_post_process_prompt,
+        shortcut::add_post_process_prompt_with_binding,
         shortcut::update_post_process_prompt,
         shortcut::delete_post_process_prompt,
         shortcut::set_post_process_selected_prompt,
