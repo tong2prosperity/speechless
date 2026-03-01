@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 
 import ModelSelector from "../model-selector";
+import LlmSelector from "./LlmSelector";
 import UpdateChecker from "../update-checker";
 
 const Footer: React.FC = () => {
@@ -24,13 +25,9 @@ const Footer: React.FC = () => {
   return (
     <footer className="bg-white border-t border-zinc-200 px-4 h-9 flex items-center justify-between text-xs text-zinc-500 select-none">
       <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 cursor-pointer hover:text-zinc-900 transition-colors">
-          <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-          <ModelSelector />
-          <span className="material-symbols-outlined text-[14px]">
-            expand_less
-          </span>
-        </div>
+        <ModelSelector />
+        <div className="w-px h-3 bg-zinc-200 mx-1" />
+        <LlmSelector />
       </div>
       <div className="flex items-center gap-4">
         <UpdateChecker />

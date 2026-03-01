@@ -21,6 +21,28 @@ pub struct LlmDownloadProgress {
     pub percentage: f64,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
+pub struct LlmModelInfo {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub repo_id: String,
+    pub file_name: String,
+    pub size_mb: u64,
+}
+
+pub static AVAILABLE_LLM_MODELS: once_cell::sync::Lazy<Vec<LlmModelInfo>> =
+    once_cell::sync::Lazy::new(|| {
+        vec![LlmModelInfo {
+            id: "qwen3-4b".to_string(),
+            name: "Qwen3 4B".to_string(),
+            description: "Powerful and efficient local LLM by Alibaba.".to_string(),
+            repo_id: "unsloth/Qwen3-4B-Instruct-2507-GGUF".to_string(),
+            file_name: "Qwen3-4B-Instruct-2507-Q4_1.gguf".to_string(),
+            size_mb: 2600,
+        }]
+    });
+
 pub struct LlmManager {
     app_handle: AppHandle,
     models_dir: PathBuf,
@@ -121,12 +143,15 @@ impl LlmManager {
         self.models_dir.clone()
     }
 
-    pub async fn download_model(
-        &self,
-        repo_id: &str,
-        file_name: &str,
-        target_model_id: &str,
-    ) -> Result<()> {
+    pub async fn download_model(&self, target_model_id: &str) -> Result<()> {
+        let model_info = AVAILABLE_LLM_MODELS
+            .iter()
+            .find(|m| m.id == target_model_id)
+            .ok_or_else(|| anyhow::anyhow!("Model not found: {}", target_model_id))?;
+
+        let repo_id = &model_info.repo_id;
+        let file_name = &model_info.file_name;
+
         let target_path = self.models_dir.join(file_name);
         if target_path.exists() {
             info!(

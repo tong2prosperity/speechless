@@ -198,9 +198,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
         log::warn!("Tray icon could not be loaded during startup; using platform default icon.");
     }
 
-    let tray = tray_builder
-        .build(app_handle)
-        .unwrap();
+    let tray = tray_builder.build(app_handle).unwrap();
     app_handle.manage(tray);
 
     // Initialize tray menu with idle state
@@ -321,6 +319,7 @@ pub fn run(cli_args: CliArgs) {
         commands::models::is_model_loading,
         commands::models::has_any_models_available,
         commands::models::has_any_models_or_downloads,
+        commands::llm_models::get_available_llm_models,
         commands::llm_models::download_local_llm,
         commands::llm_models::check_local_llm_downloaded,
         commands::llm_models::set_local_llm_unload_timeout,

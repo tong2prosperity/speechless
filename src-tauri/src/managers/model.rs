@@ -80,7 +80,9 @@ impl ModelScopeProgressCallback {
             let progress = self.progress_by_file.lock().unwrap();
             progress
                 .values()
-                .fold((0_u64, 0_u64), |(d_acc, t_acc), (d, t)| (d_acc + d, t_acc + t))
+                .fold((0_u64, 0_u64), |(d_acc, t_acc), (d, t)| {
+                    (d_acc + d, t_acc + t)
+                })
         };
 
         let percentage = if total > 0 {
@@ -193,7 +195,7 @@ impl ModelManager {
                 is_downloading: false,
                 partial_size: 0,
                 is_directory: true,
-                engine_type: EngineType::SenseVoice,
+                engine_type: EngineType::SenseVoiceSherpa,
                 accuracy_score: 0.65,
                 speed_score: 0.95,
                 supports_translation: false,
@@ -838,10 +840,7 @@ impl ModelManager {
                 ));
             }
 
-            let downloaded_path = self
-                .models_dir
-                .join(SENSE_VOICE_REPO_ID)
-                .join(file_name);
+            let downloaded_path = self.models_dir.join(SENSE_VOICE_REPO_ID).join(file_name);
             if !downloaded_path.exists() {
                 clear_downloading_state();
                 return Err(anyhow::anyhow!(

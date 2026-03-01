@@ -484,6 +484,14 @@ async getAvailableModels() : Promise<Result<ModelInfo[], string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async getAvailableLlmModels() : Promise<Result<LlmModelInfo[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_available_llm_models") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getModelInfo(modelId: string) : Promise<Result<ModelInfo | null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_model_info", { modelId }) };
@@ -783,6 +791,7 @@ export type ImplementationChangeResult = { success: boolean;
 reset_bindings: string[] }
 export type KeyboardImplementation = "tauri" | "handy_keys"
 export type LLMPrompt = { id: string; name: string; prompt: string }
+export type LlmModelInfo = { id: string; name: string; description: string; repo_id: string; file_name: string; size_mb: number }
 export type LocalLlmUnloadTimeout = "never" | "hour1" | "hour3"
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error"
 export type ModelInfo = { id: string; name: string; description: string; filename: string; url: string | null; size_mb: number; is_downloaded: boolean; is_downloading: boolean; partial_size: number; is_directory: boolean; engine_type: EngineType; accuracy_score: number; speed_score: number; supports_translation: boolean; is_recommended: boolean; supported_languages: string[]; is_custom: boolean }

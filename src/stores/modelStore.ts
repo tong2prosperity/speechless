@@ -2,7 +2,12 @@ import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import { produce } from "immer";
 import { listen } from "@tauri-apps/api/event";
-import { commands, type ModelInfo } from "@/bindings";
+import {
+  commands,
+  type ModelInfo,
+  type LlmModelInfo,
+  type Result,
+} from "@/bindings";
 
 interface DownloadProgress {
   model_id: string;
@@ -35,6 +40,8 @@ interface ModelsStore {
   llmDownloading: boolean;
   llmDownloadProgress: DownloadProgress | undefined;
   llmDownloadStats: DownloadStats | undefined;
+  llmModels: LlmModelInfo[];
+  currentLlmId: string;
 
   // Actions
   initialize: () => Promise<void>;
@@ -49,7 +56,9 @@ interface ModelsStore {
   isModelDownloading: (modelId: string) => boolean;
   isModelExtracting: (modelId: string) => boolean;
   getDownloadProgress: (modelId: string) => DownloadProgress | undefined;
-  downloadLlm: () => Promise<boolean>;
+  loadLlmModels: () => Promise<void>;
+  downloadLlm: (modelId: string) => Promise<boolean>;
+  selectLlmModel: (modelId: string) => Promise<boolean>;
   checkLlmStatus: () => Promise<void>;
 
   // Internal setters
@@ -76,6 +85,8 @@ export const useModelStore = create<ModelsStore>()(
     llmDownloading: false,
     llmDownloadProgress: undefined,
     llmDownloadStats: undefined,
+    llmModels: [],
+    currentLlmId: "",
 
     // Internal setters
     setModels: (models) => set({ models }),
@@ -267,24 +278,60 @@ export const useModelStore = create<ModelsStore>()(
       return get().downloadProgress[modelId];
     },
 
-    downloadLlm: async () => {
-      const llmId = "local-llm";
+    loadLlmModels: async () => {
       try {
-        set({ error: null, llmDownloading: true, llmDownloadProgress: {
-          model_id: llmId,
-          downloaded: 0,
-          total: 0,
-          percentage: 0,
-        }});
-        const result = await commands.downloadLocalLlm(llmId);
+        const result = await commands.getAvailableLlmModels();
+        if (result.status === "ok") {
+          set({ llmModels: result.data });
+        }
+      } catch (err) {
+        console.error("Failed to load LLM models:", err);
+      }
+    },
+
+    downloadLlm: async (modelId: string) => {
+      try {
+        set({
+          error: null,
+          llmDownloading: true,
+          llmDownloadProgress: {
+            model_id: modelId,
+            downloaded: 0,
+            total: 0,
+            percentage: 0,
+          },
+        });
+        const result = await commands.downloadLocalLlm(modelId);
         if (result.status === "ok") {
           return true;
         } else {
-          set({ error: `Failed to download LLM: ${result.error}`, llmDownloading: false });
+          set({
+            error: `Failed to download LLM: ${result.error}`,
+            llmDownloading: false,
+          });
           return false;
         }
       } catch (err) {
         set({ error: `Failed to download LLM: ${err}`, llmDownloading: false });
+        return false;
+      }
+    },
+
+    selectLlmModel: async (modelId: string) => {
+      try {
+        const result = await commands.changePostProcessModelSetting(
+          "navi_llm",
+          modelId,
+        );
+        if (result.status === "ok") {
+          set({ currentLlmId: modelId });
+          // Re-check download status when switching models
+          await get().checkLlmStatus();
+          return true;
+        }
+        return false;
+      } catch (err) {
+        console.error("Failed to select LLM model:", err);
         return false;
       }
     },
@@ -295,6 +342,18 @@ export const useModelStore = create<ModelsStore>()(
         if (result.status === "ok") {
           set({ llmDownloaded: result.data });
         }
+
+        // Also sync currentLlmId from settings
+        const settingsResult = await commands.getAppSettings();
+        if (settingsResult.status === "ok") {
+          const models = settingsResult.data.post_process_models;
+          if (models && models["navi_llm"]) {
+            set({ currentLlmId: models["navi_llm"] });
+          } else {
+            // Default if not set
+            set({ currentLlmId: "qwen3-4b" });
+          }
+        }
       } catch (err) {
         console.error("Failed to check LLM status:", err);
       }
@@ -303,10 +362,22 @@ export const useModelStore = create<ModelsStore>()(
     initialize: async () => {
       if (get().initialized) return;
 
-      const { loadModels, loadCurrentModel, checkFirstRun, checkLlmStatus } = get();
+      const {
+        loadModels,
+        loadCurrentModel,
+        checkFirstRun,
+        checkLlmStatus,
+        loadLlmModels,
+      } = get();
 
       // Load initial data
-      await Promise.all([loadModels(), loadCurrentModel(), checkFirstRun(), checkLlmStatus()]);
+      await Promise.all([
+        loadModels(),
+        loadCurrentModel(),
+        checkFirstRun(),
+        checkLlmStatus(),
+        loadLlmModels(),
+      ]);
 
       // Set up event listeners
       listen<DownloadProgress>("model-download-progress", (event) => {
@@ -314,15 +385,15 @@ export const useModelStore = create<ModelsStore>()(
         if (progress.model_id === "local-llm") {
           set({
             llmDownloadProgress: progress,
-            llmDownloading: progress.percentage < 100
+            llmDownloading: progress.percentage < 100,
           });
-          
+
           // Update LLM stats
           const now = Date.now();
           set(
             produce((state) => {
               const current = state.llmDownloadStats;
-  
+
               if (!current) {
                 state.llmDownloadStats = {
                   startTime: now,
@@ -333,7 +404,7 @@ export const useModelStore = create<ModelsStore>()(
               } else {
                 const timeDiff = (now - current.lastUpdate) / 1000;
                 const bytesDiff = progress.downloaded - current.totalDownloaded;
-  
+
                 if (timeDiff > 0.5) {
                   const currentSpeed = bytesDiff / (1024 * 1024) / timeDiff;
                   const validCurrentSpeed = Math.max(0, currentSpeed);
@@ -341,7 +412,7 @@ export const useModelStore = create<ModelsStore>()(
                     current.speed > 0
                       ? current.speed * 0.8 + validCurrentSpeed * 0.2
                       : validCurrentSpeed;
-  
+
                   state.llmDownloadStats = {
                     startTime: current.startTime,
                     lastUpdate: now,
@@ -400,8 +471,8 @@ export const useModelStore = create<ModelsStore>()(
       listen<string>("model-download-complete", (event) => {
         const modelId = event.payload;
         if (modelId === "local-llm") {
-           set({ llmDownloading: false, llmDownloaded: true });
-           return;
+          set({ llmDownloading: false, llmDownloaded: true });
+          return;
         }
         set(
           produce((state) => {
