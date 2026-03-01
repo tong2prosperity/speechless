@@ -12,22 +12,6 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, SystemTime};
 use tauri::{AppHandle, Emitter};
-use transcribe_rs::{
-    engines::{
-        moonshine::{
-            ModelVariant, MoonshineEngine, MoonshineModelParams, MoonshineStreamingEngine,
-            StreamingModelParams,
-        },
-        parakeet::{
-            ParakeetEngine, ParakeetInferenceParams, ParakeetModelParams, TimestampGranularity,
-        },
-        sense_voice::{
-            Language as SenseVoiceLanguage, SenseVoiceEngine, SenseVoiceInferenceParams,
-            SenseVoiceModelParams,
-        },
-    },
-    TranscriptionEngine,
-};
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ModelStateEvent {
@@ -38,11 +22,7 @@ pub struct ModelStateEvent {
 }
 
 enum LoadedEngine {
-    Parakeet(ParakeetEngine),
     ParakeetSherpa(ParakeetSherpaASR),
-    Moonshine(MoonshineEngine),
-    MoonshineStreaming(MoonshineStreamingEngine),
-    SenseVoice(SenseVoiceEngine),
     SenseVoiceSherpa(SenseVoiceSherpaASR),
 }
 
@@ -162,11 +142,7 @@ impl TranscriptionManager {
             let mut engine = self.lock_engine();
             if let Some(ref mut loaded_engine) = *engine {
                 match loaded_engine {
-                    LoadedEngine::Parakeet(ref mut e) => e.unload_model(),
                     LoadedEngine::ParakeetSherpa(ref mut e) => e.unload_model(),
-                    LoadedEngine::Moonshine(ref mut e) => e.unload_model(),
-                    LoadedEngine::MoonshineStreaming(ref mut e) => e.unload_model(),
-                    LoadedEngine::SenseVoice(ref mut e) => e.unload_model(),
                     LoadedEngine::SenseVoiceSherpa(ref mut e) => e.unload_model(),
                 }
             }
@@ -247,91 +223,6 @@ impl TranscriptionManager {
 
         // Create appropriate engine based on model type
         let loaded_engine = match model_info.engine_type {
-            EngineType::Parakeet => {
-                let mut engine = ParakeetEngine::new();
-                engine
-                    .load_model_with_params(&model_path, ParakeetModelParams::int8())
-                    .map_err(|e| {
-                        let error_msg =
-                            format!("Failed to load parakeet model {}: {}", model_id, e);
-                        let _ = self.app_handle.emit(
-                            "model-state-changed",
-                            ModelStateEvent {
-                                event_type: "loading_failed".to_string(),
-                                model_id: Some(model_id.to_string()),
-                                model_name: Some(model_info.name.clone()),
-                                error: Some(error_msg.clone()),
-                            },
-                        );
-                        anyhow::anyhow!(error_msg)
-                    })?;
-                LoadedEngine::Parakeet(engine)
-            }
-            EngineType::Moonshine => {
-                let mut engine = MoonshineEngine::new();
-                engine
-                    .load_model_with_params(
-                        &model_path,
-                        MoonshineModelParams::variant(ModelVariant::Base),
-                    )
-                    .map_err(|e| {
-                        let error_msg =
-                            format!("Failed to load moonshine model {}: {}", model_id, e);
-                        let _ = self.app_handle.emit(
-                            "model-state-changed",
-                            ModelStateEvent {
-                                event_type: "loading_failed".to_string(),
-                                model_id: Some(model_id.to_string()),
-                                model_name: Some(model_info.name.clone()),
-                                error: Some(error_msg.clone()),
-                            },
-                        );
-                        anyhow::anyhow!(error_msg)
-                    })?;
-                LoadedEngine::Moonshine(engine)
-            }
-            EngineType::MoonshineStreaming => {
-                let mut engine = MoonshineStreamingEngine::new();
-                engine
-                    .load_model_with_params(&model_path, StreamingModelParams::default())
-                    .map_err(|e| {
-                        let error_msg = format!(
-                            "Failed to load moonshine streaming model {}: {}",
-                            model_id, e
-                        );
-                        let _ = self.app_handle.emit(
-                            "model-state-changed",
-                            ModelStateEvent {
-                                event_type: "loading_failed".to_string(),
-                                model_id: Some(model_id.to_string()),
-                                model_name: Some(model_info.name.clone()),
-                                error: Some(error_msg.clone()),
-                            },
-                        );
-                        anyhow::anyhow!(error_msg)
-                    })?;
-                LoadedEngine::MoonshineStreaming(engine)
-            }
-            EngineType::SenseVoice => {
-                let mut engine = SenseVoiceEngine::new();
-                engine
-                    .load_model_with_params(&model_path, SenseVoiceModelParams::int8())
-                    .map_err(|e| {
-                        let error_msg =
-                            format!("Failed to load SenseVoice model {}: {}", model_id, e);
-                        let _ = self.app_handle.emit(
-                            "model-state-changed",
-                            ModelStateEvent {
-                                event_type: "loading_failed".to_string(),
-                                model_id: Some(model_id.to_string()),
-                                model_name: Some(model_info.name.clone()),
-                                error: Some(error_msg.clone()),
-                            },
-                        );
-                        anyhow::anyhow!(error_msg)
-                    })?;
-                LoadedEngine::SenseVoice(engine)
-            }
             EngineType::SenseVoiceSherpa => {
                 let model_file = model_path
                     .join("model.int8.onnx")
@@ -514,68 +405,20 @@ impl TranscriptionManager {
             // Release the lock before transcribing — no mutex held during the engine call
             drop(engine_guard);
 
-            let transcribe_result = catch_unwind(AssertUnwindSafe(
-                || -> Result<transcribe_rs::TranscriptionResult> {
-                    match &mut engine {
-                        LoadedEngine::Parakeet(parakeet_engine) => {
-                            let params = ParakeetInferenceParams {
-                                timestamp_granularity: TimestampGranularity::Segment,
-                                ..Default::default()
-                            };
-                            parakeet_engine
-                                .transcribe_samples(audio, Some(params))
-                                .map_err(|e| {
-                                    anyhow::anyhow!("Parakeet transcription failed: {}", e)
-                                })
-                        }
-                        LoadedEngine::Moonshine(moonshine_engine) => moonshine_engine
-                            .transcribe_samples(audio, None)
-                            .map_err(|e| anyhow::anyhow!("Moonshine transcription failed: {}", e)),
-                        LoadedEngine::MoonshineStreaming(streaming_engine) => streaming_engine
-                            .transcribe_samples(audio, None)
-                            .map_err(|e| {
-                                anyhow::anyhow!("Moonshine streaming transcription failed: {}", e)
-                            }),
-                        LoadedEngine::SenseVoice(sense_voice_engine) => {
-                            let language = match settings.selected_language.as_str() {
-                                "zh" | "zh-Hans" | "zh-Hant" => SenseVoiceLanguage::Chinese,
-                                "en" => SenseVoiceLanguage::English,
-                                "ja" => SenseVoiceLanguage::Japanese,
-                                "ko" => SenseVoiceLanguage::Korean,
-                                "yue" => SenseVoiceLanguage::Cantonese,
-                                _ => SenseVoiceLanguage::Auto,
-                            };
-                            let params = SenseVoiceInferenceParams {
-                                language,
-                                use_itn: true,
-                            };
-                            sense_voice_engine
-                                .transcribe_samples(audio, Some(params))
-                                .map_err(|e| {
-                                    anyhow::anyhow!("SenseVoice transcription failed: {}", e)
-                                })
-                        }
-                        LoadedEngine::SenseVoiceSherpa(sherpa_engine) => sherpa_engine
-                            .transcribe(16000, &audio)
-                            .map(|text| transcribe_rs::TranscriptionResult {
-                                text,
-                                segments: None,
-                            })
-                            .map_err(|e| {
-                                anyhow::anyhow!("SenseVoice Sherpa transcription failed: {}", e)
-                            }),
-                        LoadedEngine::ParakeetSherpa(sherpa_engine) => sherpa_engine
-                            .transcribe(16000, &audio)
-                            .map(|text| transcribe_rs::TranscriptionResult {
-                                text,
-                                segments: None,
-                            })
-                            .map_err(|e| {
-                                anyhow::anyhow!("Parakeet Sherpa transcription failed: {}", e)
-                            }),
+            let transcribe_result = catch_unwind(AssertUnwindSafe(|| -> Result<String> {
+                match &mut engine {
+                    LoadedEngine::SenseVoiceSherpa(sherpa_engine) => {
+                        sherpa_engine.transcribe(16000, &audio).map_err(|e| {
+                            anyhow::anyhow!("SenseVoice Sherpa transcription failed: {}", e)
+                        })
                     }
-                },
-            ));
+                    LoadedEngine::ParakeetSherpa(sherpa_engine) => {
+                        sherpa_engine.transcribe(16000, &audio).map_err(|e| {
+                            anyhow::anyhow!("Parakeet Sherpa transcription failed: {}", e)
+                        })
+                    }
+                }
+            }));
 
             match transcribe_result {
                 Ok(inner_result) => {
@@ -629,12 +472,12 @@ impl TranscriptionManager {
         // Apply word correction if custom words are configured
         let corrected_result = if !settings.custom_words.is_empty() {
             apply_custom_words(
-                &result.text,
+                &result,
                 &settings.custom_words,
                 settings.word_correction_threshold,
             )
         } else {
-            result.text
+            result
         };
 
         // Filter out filler words and hallucinations

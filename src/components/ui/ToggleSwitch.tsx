@@ -49,12 +49,30 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
         <label
           htmlFor={switchId}
           className={`relative block h-5 w-10 rounded-full transition-colors duration-200 ${
-            checked ? "bg-zinc-900" : "bg-zinc-300"
+            checked ? "bg-black" : "bg-zinc-300"
           } ${isDisabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
         >
           <span
-            className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-all duration-200 ${checked ? "left-[22px]" : "left-0.5"}`}
-          />
+            className={`absolute top-0.5 h-4 w-4 rounded-full flex items-center justify-center transition-all duration-200 ${
+              checked
+                ? "left-[22px] bg-[#2563eb]"
+                : "left-0.5 bg-white shadow-sm"
+            }`}
+          >
+            {checked && (
+              <svg
+                viewBox="0 0 28 28"
+                fill="none"
+                stroke="white"
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="w-2.5 h-2.5"
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            )}
+          </span>
         </label>
       </div>
     </SettingContainer>

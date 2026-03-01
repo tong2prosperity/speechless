@@ -29,18 +29,31 @@ pub struct LlmModelInfo {
     pub repo_id: String,
     pub file_name: String,
     pub size_mb: u64,
+    pub is_downloaded: bool,
 }
 
 pub static AVAILABLE_LLM_MODELS: once_cell::sync::Lazy<Vec<LlmModelInfo>> =
     once_cell::sync::Lazy::new(|| {
-        vec![LlmModelInfo {
-            id: "qwen3-4b".to_string(),
-            name: "Qwen3 4B".to_string(),
-            description: "Powerful and efficient local LLM by Alibaba.".to_string(),
-            repo_id: "unsloth/Qwen3-4B-Instruct-2507-GGUF".to_string(),
-            file_name: "Qwen3-4B-Instruct-2507-Q4_1.gguf".to_string(),
-            size_mb: 2600,
-        }]
+        vec![
+            LlmModelInfo {
+                id: "qwen3-4b".to_string(),
+                name: "Qwen3 4B".to_string(),
+                description: "Powerful and efficient local LLM by Alibaba.".to_string(),
+                repo_id: "unsloth/Qwen3-4B-Instruct-2507-GGUF".to_string(),
+                file_name: "Qwen3-4B-Instruct-2507-Q4_1.gguf".to_string(),
+                size_mb: 2600,
+                is_downloaded: false,
+            },
+            LlmModelInfo {
+                id: "liquid-lfm-2.5-1.2b".to_string(),
+                name: "Liquid LFM-2.5 1.2B".to_string(),
+                description: "Next-generation 1.2B parameter model by Liquid AI.".to_string(),
+                repo_id: "LiquidAI/LFM2.5-1.2B-Instruct-GGUF".to_string(),
+                file_name: "LFM2.5-1.2B-Instruct-Q4_K_M.gguf".to_string(),
+                size_mb: 731,
+                is_downloaded: false,
+            },
+        ]
     });
 
 pub struct LlmManager {

@@ -14,11 +14,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub enum EngineType {
-    Parakeet,
     ParakeetSherpa,
-    Moonshine,
-    MoonshineStreaming,
-    SenseVoice,
     SenseVoiceSherpa,
 }
 

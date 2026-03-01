@@ -514,6 +514,7 @@ export const useModelStore = create<ModelsStore>()(
         const isLlm = get().llmModels.some((m) => m.id === modelId);
         if (isLlm) {
           set({ llmDownloading: false, llmDownloaded: true });
+          get().loadLlmModels();
           return;
         }
         set(
@@ -579,6 +580,7 @@ export const useModelStore = create<ModelsStore>()(
 
       listen<string>("llm-model-deleted", () => {
         set({ llmDownloaded: false });
+        get().loadLlmModels();
       });
 
       listen<string>("model-deleted", () => {

@@ -5,8 +5,18 @@ use tauri::{AppHandle, State};
 
 #[tauri::command]
 #[specta::specta]
-pub async fn get_available_llm_models() -> Result<Vec<LlmModelInfo>, String> {
-    Ok(AVAILABLE_LLM_MODELS.clone())
+pub async fn get_available_llm_models(
+    llm_manager: State<'_, Arc<LlmManager>>,
+) -> Result<Vec<LlmModelInfo>, String> {
+    let mut models = AVAILABLE_LLM_MODELS.clone();
+    let models_dir = llm_manager.get_models_dir();
+
+    for model in models.iter_mut() {
+        let target_path = models_dir.join(&model.file_name);
+        model.is_downloaded = target_path.exists();
+    }
+
+    Ok(models)
 }
 
 #[tauri::command]
