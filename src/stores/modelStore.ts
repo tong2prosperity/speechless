@@ -59,6 +59,8 @@ interface ModelsStore {
   loadLlmModels: () => Promise<void>;
   downloadLlm: (modelId: string) => Promise<boolean>;
   selectLlmModel: (modelId: string) => Promise<boolean>;
+  cancelLlmDownload: (modelId: string) => Promise<boolean>;
+  deleteLlm: (modelId: string) => Promise<boolean>;
   checkLlmStatus: () => Promise<void>;
 
   // Internal setters
@@ -317,6 +319,44 @@ export const useModelStore = create<ModelsStore>()(
       }
     },
 
+    cancelLlmDownload: async (modelId: string) => {
+      try {
+        set({ error: null });
+        const result = await commands.cancelLocalLlmDownload(modelId);
+        if (result.status === "ok") {
+          set({
+            llmDownloading: false,
+            llmDownloadProgress: undefined,
+            llmDownloadStats: undefined,
+          });
+          return true;
+        } else {
+          set({ error: `Failed to cancel LLM download: ${result.error}` });
+          return false;
+        }
+      } catch (err) {
+        set({ error: `Failed to cancel LLM download: ${err}` });
+        return false;
+      }
+    },
+
+    deleteLlm: async (modelId: string) => {
+      try {
+        set({ error: null });
+        const result = await commands.deleteLocalLlm(modelId);
+        if (result.status === "ok") {
+          set({ llmDownloaded: false });
+          return true;
+        } else {
+          set({ error: `Failed to delete LLM: ${result.error}` });
+          return false;
+        }
+      } catch (err) {
+        set({ error: `Failed to delete LLM: ${err}` });
+        return false;
+      }
+    },
+
     selectLlmModel: async (modelId: string) => {
       try {
         const result = await commands.changePostProcessModelSetting(
@@ -382,7 +422,8 @@ export const useModelStore = create<ModelsStore>()(
       // Set up event listeners
       listen<DownloadProgress>("model-download-progress", (event) => {
         const progress = event.payload;
-        if (progress.model_id === "local-llm") {
+        const isLlm = get().llmModels.some((m) => m.id === progress.model_id);
+        if (isLlm) {
           set({
             llmDownloadProgress: progress,
             llmDownloading: progress.percentage < 100,
@@ -470,7 +511,8 @@ export const useModelStore = create<ModelsStore>()(
 
       listen<string>("model-download-complete", (event) => {
         const modelId = event.payload;
-        if (modelId === "local-llm") {
+        const isLlm = get().llmModels.some((m) => m.id === modelId);
+        if (isLlm) {
           set({ llmDownloading: false, llmDownloaded: true });
           return;
         }
@@ -525,6 +567,18 @@ export const useModelStore = create<ModelsStore>()(
             delete state.downloadStats[modelId];
           }),
         );
+      });
+
+      listen<string>("llm-download-cancelled", () => {
+        set({
+          llmDownloading: false,
+          llmDownloadProgress: undefined,
+          llmDownloadStats: undefined,
+        });
+      });
+
+      listen<string>("llm-model-deleted", () => {
+        set({ llmDownloaded: false });
       });
 
       listen<string>("model-deleted", () => {

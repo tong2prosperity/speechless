@@ -322,6 +322,8 @@ pub fn run(cli_args: CliArgs) {
         commands::llm_models::get_available_llm_models,
         commands::llm_models::download_local_llm,
         commands::llm_models::check_local_llm_downloaded,
+        commands::llm_models::cancel_local_llm_download,
+        commands::llm_models::delete_local_llm,
         commands::llm_models::set_local_llm_unload_timeout,
         commands::audio::update_microphone_mode,
         commands::audio::get_microphone_mode,

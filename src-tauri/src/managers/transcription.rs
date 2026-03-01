@@ -1,5 +1,6 @@
 use crate::audio_toolkit::{apply_custom_words, filter_transcription_output};
 use crate::managers::model::{EngineType, ModelManager};
+use crate::managers::parakeet_sherpa::ParakeetSherpaASR;
 use crate::managers::sense_voice_sherpa::SenseVoiceSherpaASR;
 use crate::settings::{get_settings, ModelUnloadTimeout};
 use anyhow::Result;
@@ -38,6 +39,7 @@ pub struct ModelStateEvent {
 
 enum LoadedEngine {
     Parakeet(ParakeetEngine),
+    ParakeetSherpa(ParakeetSherpaASR),
     Moonshine(MoonshineEngine),
     MoonshineStreaming(MoonshineStreamingEngine),
     SenseVoice(SenseVoiceEngine),
@@ -161,6 +163,7 @@ impl TranscriptionManager {
             if let Some(ref mut loaded_engine) = *engine {
                 match loaded_engine {
                     LoadedEngine::Parakeet(ref mut e) => e.unload_model(),
+                    LoadedEngine::ParakeetSherpa(ref mut e) => e.unload_model(),
                     LoadedEngine::Moonshine(ref mut e) => e.unload_model(),
                     LoadedEngine::MoonshineStreaming(ref mut e) => e.unload_model(),
                     LoadedEngine::SenseVoice(ref mut e) => e.unload_model(),
@@ -336,22 +339,65 @@ impl TranscriptionManager {
                     .to_string();
                 let tokens_file = model_path.join("tokens.txt").to_string_lossy().to_string();
 
-                let engine = SenseVoiceSherpaASR::new(&model_file, &tokens_file, None, Some(4))
-                    .map_err(|e| {
-                        let error_msg =
-                            format!("Failed to load SenseVoice Sherpa model {}: {}", model_id, e);
-                        let _ = self.app_handle.emit(
-                            "model-state-changed",
-                            ModelStateEvent {
-                                event_type: "loading_failed".to_string(),
-                                model_id: Some(model_id.to_string()),
-                                model_name: Some(model_info.name.clone()),
-                                error: Some(error_msg.clone()),
-                            },
-                        );
-                        anyhow::anyhow!(error_msg)
-                    })?;
+                let engine = SenseVoiceSherpaASR::new(
+                    &model_file,
+                    &tokens_file,
+                    Some("coreml".into()),
+                    Some(4),
+                )
+                .map_err(|e| {
+                    let error_msg =
+                        format!("Failed to load SenseVoice Sherpa model {}: {}", model_id, e);
+                    let _ = self.app_handle.emit(
+                        "model-state-changed",
+                        ModelStateEvent {
+                            event_type: "loading_failed".to_string(),
+                            model_id: Some(model_id.to_string()),
+                            model_name: Some(model_info.name.clone()),
+                            error: Some(error_msg.clone()),
+                        },
+                    );
+                    anyhow::anyhow!(error_msg)
+                })?;
                 LoadedEngine::SenseVoiceSherpa(engine)
+            }
+            EngineType::ParakeetSherpa => {
+                let encoder_file = model_path
+                    .join("encoder.int8.onnx")
+                    .to_string_lossy()
+                    .to_string();
+                let decoder_file = model_path
+                    .join("decoder.int8.onnx")
+                    .to_string_lossy()
+                    .to_string();
+                let joiner_file = model_path
+                    .join("joiner.int8.onnx")
+                    .to_string_lossy()
+                    .to_string();
+                let tokens_file = model_path.join("tokens.txt").to_string_lossy().to_string();
+
+                let engine = ParakeetSherpaASR::new(
+                    &encoder_file,
+                    &decoder_file,
+                    &joiner_file,
+                    &tokens_file,
+                    Some(4),
+                )
+                .map_err(|e| {
+                    let error_msg =
+                        format!("Failed to load Parakeet Sherpa model {}: {}", model_id, e);
+                    let _ = self.app_handle.emit(
+                        "model-state-changed",
+                        ModelStateEvent {
+                            event_type: "loading_failed".to_string(),
+                            model_id: Some(model_id.to_string()),
+                            model_name: Some(model_info.name.clone()),
+                            error: Some(error_msg.clone()),
+                        },
+                    );
+                    anyhow::anyhow!(error_msg)
+                })?;
+                LoadedEngine::ParakeetSherpa(engine)
             }
         };
 
@@ -517,6 +563,15 @@ impl TranscriptionManager {
                             })
                             .map_err(|e| {
                                 anyhow::anyhow!("SenseVoice Sherpa transcription failed: {}", e)
+                            }),
+                        LoadedEngine::ParakeetSherpa(sherpa_engine) => sherpa_engine
+                            .transcribe(16000, &audio)
+                            .map(|text| transcribe_rs::TranscriptionResult {
+                                text,
+                                segments: None,
+                            })
+                            .map_err(|e| {
+                                anyhow::anyhow!("Parakeet Sherpa transcription failed: {}", e)
                             }),
                     }
                 },

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { ChevronDown, Globe } from "lucide-react";
+import { ChevronDown, Globe, Trash2 } from "lucide-react";
 import type { ModelCardStatus } from "@/components/onboarding";
 import { ModelCard } from "@/components/onboarding";
 import { useModelStore } from "@/stores/modelStore";
@@ -38,6 +38,9 @@ export const ModelsSettings: React.FC = () => {
     llmDownloadProgress,
     llmDownloadStats,
     downloadLlm,
+    cancelLlmDownload,
+    deleteLlm,
+    currentLlmId,
   } = useModelStore();
 
   // click outside handler for language dropdown
@@ -151,6 +154,34 @@ export const ModelsSettings: React.FC = () => {
       await cancelDownload(modelId);
     } catch (err) {
       console.error(`Failed to cancel download for ${modelId}:`, err);
+    }
+  };
+
+  const handleLlmDelete = async () => {
+    const confirmed = await ask(
+      t("settings.models.deleteConfirm", {
+        modelName: "Local LLM (" + currentLlmId + ")",
+      }),
+      {
+        title: t("settings.models.deleteTitle"),
+        kind: "warning",
+      },
+    );
+
+    if (confirmed) {
+      try {
+        await deleteLlm(currentLlmId);
+      } catch (err) {
+        console.error(`Failed to delete LLM ${currentLlmId}:`, err);
+      }
+    }
+  };
+
+  const handleLlmCancel = async () => {
+    try {
+      await cancelLlmDownload(currentLlmId);
+    } catch (err) {
+      console.error(`Failed to cancel LLM download:`, err);
     }
   };
 
@@ -356,47 +387,79 @@ export const ModelsSettings: React.FC = () => {
             </div>
           )}
 
-          {/* Local LLM Section */}
           <div className="space-y-3 pt-4 border-t border-mid-gray/20">
             <h2 className="text-sm font-medium text-text/60">
               Local LLM Model
             </h2>
-            <div className="bg-background border border-mid-gray/20 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h3 className="text-base font-semibold text-text">
-                  Qwen3-4B-Instruct
-                </h3>
-                <p className="text-sm text-text/60 mt-0.5">
-                  Local language model for post-processing entirely on your device.
-                </p>
-                {llmDownloading && llmDownloadProgress && (
-                  <div className="mt-2 text-xs text-text/50">
-                    Downloading: {Math.round(llmDownloadProgress.percentage)}% 
-                    {llmDownloadStats?.speed ? ` (${llmDownloadStats.speed.toFixed(1)} MB/s)` : ""}
-                  </div>
-                )}
+            <div className="bg-background border border-mid-gray/20 rounded-xl p-4 flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-base font-semibold text-text">
+                    Qwen3-4B-Instruct
+                  </h3>
+                  <p className="text-sm text-text/60 mt-0.5">
+                    Local language model for post-processing entirely on your
+                    device.
+                  </p>
+                </div>
+                <div className="flex-shrink-0 flex items-center gap-2">
+                  {llmDownloaded ? (
+                    <>
+                      <div className="px-3 py-1.5 text-sm font-medium text-logo-primary bg-logo-primary/10 rounded-lg">
+                        {t("settings.models.downloaded")}
+                      </div>
+                      <button
+                        onClick={() => handleLlmDelete()}
+                        className="p-2 text-logo-primary/85 hover:text-logo-primary hover:bg-logo-primary/10 rounded-lg transition-colors"
+                        title={t("modelSelector.deleteModel", {
+                          modelName: "Local LLM",
+                        })}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  ) : llmDownloading ? (
+                    <button
+                      onClick={() => handleLlmCancel()}
+                      className="px-3 py-1.5 text-sm font-medium text-red-500 bg-red-500/10 rounded-lg hover:bg-red-500/20 transition-colors"
+                    >
+                      {t("modelSelector.cancel")}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => downloadLlm(currentLlmId)}
+                      className="px-4 py-2 text-sm font-medium text-white bg-logo-primary rounded-lg hover:bg-logo-primary/90 transition-colors"
+                    >
+                      {t("onboarding.download")}
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex-shrink-0">
-                {llmDownloaded ? (
-                  <div className="px-3 py-1.5 text-sm font-medium text-logo-primary bg-logo-primary/10 rounded-lg">
-                    Downloaded
-                  </div>
-                ) : llmDownloading ? (
-                  <div className="w-24 h-8 bg-mid-gray/10 rounded-lg overflow-hidden relative">
-                    <div 
-                      className="absolute top-0 left-0 h-full bg-logo-primary/20 transition-all duration-300"
-                      style={{ width: `${llmDownloadProgress?.percentage || 0}%` }}
+
+              {llmDownloading && llmDownloadProgress && (
+                <div className="w-full">
+                  <div className="w-full h-1.5 bg-mid-gray/20 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-logo-primary rounded-full transition-all duration-300"
+                      style={{ width: `${llmDownloadProgress.percentage}%` }}
                     />
                   </div>
-                ) : (
-                  <button
-                    onClick={() => downloadLlm()}
-                    className="px-4 py-2 text-sm font-medium text-white bg-logo-primary rounded-lg hover:bg-logo-primary/90 transition-colors"
-                  >
-                    Download
-                  </button>
-                )}
-              </div>
+                  <div className="flex items-center justify-between text-xs mt-1.5 text-text/50">
+                    <span>
+                      {t("modelSelector.downloading", {
+                        percentage: Math.round(llmDownloadProgress.percentage),
+                      })}
+                    </span>
+                    {llmDownloadStats?.speed ? (
+                      <span className="tabular-nums">
+                        {t("modelSelector.downloadSpeed", {
+                          speed: llmDownloadStats.speed.toFixed(1),
+                        })}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

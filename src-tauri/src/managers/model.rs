@@ -1,26 +1,21 @@
 use crate::settings::{get_settings, write_settings};
 use anyhow::Result;
 use async_trait::async_trait;
-use flate2::read::GzDecoder;
-use futures_util::StreamExt;
 use log::{debug, info, warn};
 use modelscope_ng::{ModelScope, ProgressCallback};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::fs::File;
-use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-use tar::Archive;
 use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub enum EngineType {
     Parakeet,
+    ParakeetSherpa,
     Moonshine,
     MoonshineStreaming,
     SenseVoice,
@@ -46,6 +41,8 @@ pub struct ModelInfo {
     pub is_recommended: bool,       // Whether this is the recommended model for new users
     pub supported_languages: Vec<String>, // Languages this model can transcribe
     pub is_custom: bool,            // Whether this is a user-provided custom model
+    pub model_scope_repo: Option<String>, // ModelScope repository ID
+    pub model_scope_files: Option<Vec<String>>, // List of files tracked in ModelScope
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -61,11 +58,9 @@ pub struct ModelManager {
     models_dir: PathBuf,
     available_models: Mutex<HashMap<String, ModelInfo>>,
     cancel_flags: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
-    extracting_models: Arc<Mutex<HashSet<String>>>,
 }
 
-const SENSE_VOICE_REPO_ID: &str = "trevorlink/sense_voice_onnx";
-const SENSE_VOICE_REQUIRED_FILES: [&str; 3] = ["model.int8.onnx", "tokens.txt", "silero_v6.onnx"];
+const ASR_COLLECTION_REPO_ID: &str = "trevorlink/asr-collection";
 
 #[derive(Clone)]
 struct ModelScopeProgressCallback {
@@ -148,39 +143,44 @@ impl ModelManager {
         }
 
         let mut available_models = HashMap::new();
-
-        // Add NVIDIA Parakeet models (directory-based)
+        // Add NVIDIA Parakeet V3 models (directory-based)
         available_models.insert(
-            "parakeet-tdt-0.6b-v2".to_string(),
+            "parakeet-tdt-0.6b-v3".to_string(),
             ModelInfo {
-                id: "parakeet-tdt-0.6b-v2".to_string(),
-                name: "Parakeet V2".to_string(),
-                description: "English only. The best model for English speakers.".to_string(),
-                filename: "parakeet-tdt-0.6b-v2-int8".to_string(), // Directory name
-                url: Some("https://blob.handy.computer/parakeet-v2-int8.tar.gz".to_string()),
-                size_mb: 473, // Approximate size for int8 quantized model
+                id: "parakeet-tdt-0.6b-v3".to_string(),
+                name: "Parakeet V3".to_string(),
+                description: "English only. Latest generation Parakeet model for highest accuracy."
+                    .to_string(),
+                filename: "parakeet-tdt-0.6b-v3-int8".to_string(), // Directory name
+                url: None,                                         // Downloaded via ModelScope
+                size_mb: 475,
                 is_downloaded: false,
                 is_downloading: false,
                 partial_size: 0,
                 is_directory: true,
-                engine_type: EngineType::Parakeet,
-                accuracy_score: 0.85,
-                speed_score: 0.85,
+                engine_type: EngineType::ParakeetSherpa,
+                accuracy_score: 0.92,
+                speed_score: 0.82,
                 supports_translation: false,
-                is_recommended: false,
+                is_recommended: true,
                 supported_languages: vec!["en".to_string()],
                 is_custom: false,
+                model_scope_repo: Some(ASR_COLLECTION_REPO_ID.to_string()),
+                model_scope_files: Some(vec![
+                    "parakeet-0.6b-v3/decoder.int8.onnx".to_string(),
+                    "parakeet-0.6b-v3/encoder.int8.onnx".to_string(),
+                    "parakeet-0.6b-v3/joiner.int8.onnx".to_string(),
+                    "parakeet-0.6b-v3/tokens.txt".to_string(),
+                ]),
             },
         );
 
-        // Parakeet V2 is kept above.
         // SenseVoice supported languages
         let sense_voice_languages: Vec<String> =
             vec!["zh", "zh-Hans", "zh-Hant", "en", "yue", "ja", "ko"]
                 .into_iter()
                 .map(String::from)
                 .collect();
-
         available_models.insert(
             "sense-voice-int8".to_string(),
             ModelInfo {
@@ -196,12 +196,18 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::SenseVoiceSherpa,
-                accuracy_score: 0.65,
+                accuracy_score: 0.85,
                 speed_score: 0.95,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: sense_voice_languages.clone(),
                 is_custom: false,
+                model_scope_repo: Some(ASR_COLLECTION_REPO_ID.to_string()),
+                model_scope_files: Some(vec![
+                    "sense_voice/model.int8.onnx".to_string(),
+                    "sense_voice/tokens.txt".to_string(),
+                    "sense_voice/silero_v6.onnx".to_string(),
+                ]),
             },
         );
 
@@ -230,6 +236,8 @@ impl ModelManager {
                     is_recommended: false,
                     supported_languages: sense_voice_languages.clone(),
                     is_custom: true, // Marked as custom since it is not automatically downloadable
+                    model_scope_repo: None,
+                    model_scope_files: None,
                 },
             );
         }
@@ -239,7 +247,6 @@ impl ModelManager {
             models_dir,
             available_models: Mutex::new(available_models),
             cancel_flags: Arc::new(Mutex::new(HashMap::new())),
-            extracting_models: Arc::new(Mutex::new(HashSet::new())),
         };
 
         // Migrate any bundled models to user directory
@@ -299,27 +306,17 @@ impl ModelManager {
                 // For directory-based models, check if the directory exists
                 let model_path = self.models_dir.join(&model.filename);
                 let partial_path = self.models_dir.join(format!("{}.partial", &model.filename));
-                let extracting_path = self
-                    .models_dir
-                    .join(format!("{}.extracting", &model.filename));
 
-                // Clean up any leftover .extracting directories from interrupted extractions
-                // But only if this model is NOT currently being extracted
-                let is_currently_extracting = {
-                    let extracting = self.extracting_models.lock().unwrap();
-                    extracting.contains(&model.id)
-                };
-                if extracting_path.exists() && !is_currently_extracting {
-                    warn!("Cleaning up interrupted extraction for model: {}", model.id);
-                    let _ = fs::remove_dir_all(&extracting_path);
-                }
-
-                model.is_downloaded = if model.id == "sense-voice-int8" {
+                model.is_downloaded = if let Some(files) = &model.model_scope_files {
                     model_path.exists()
                         && model_path.is_dir()
-                        && SENSE_VOICE_REQUIRED_FILES
-                            .iter()
-                            .all(|file| model_path.join(file).exists())
+                        && files.iter().all(|file| {
+                            let f = std::path::Path::new(file)
+                                .file_name()
+                                .and_then(|f| f.to_str())
+                                .unwrap_or(file);
+                            model_path.join(f).exists()
+                        })
                 } else {
                     model_path.exists() && model_path.is_dir()
                 };
@@ -402,352 +399,26 @@ impl ModelManager {
         let model_info =
             model_info.ok_or_else(|| anyhow::anyhow!("Model not found: {}", model_id))?;
 
-        if model_id == "sense-voice-int8" {
-            return self.download_sense_voice_model(&model_info).await;
-        }
-
-        let url = model_info
-            .url
-            .ok_or_else(|| anyhow::anyhow!("No download URL for model"))?;
-        let model_path = self.models_dir.join(&model_info.filename);
-        let partial_path = self
-            .models_dir
-            .join(format!("{}.partial", &model_info.filename));
-
-        // Don't download if complete version already exists
-        if model_path.exists() {
-            // Clean up any partial file that might exist
-            if partial_path.exists() {
-                let _ = fs::remove_file(&partial_path);
-            }
-            self.update_download_status()?;
-            return Ok(());
-        }
-
-        // Check if we have a partial download to resume
-        let mut resume_from = if partial_path.exists() {
-            let size = partial_path.metadata()?.len();
-            info!("Resuming download of model {} from byte {}", model_id, size);
-            size
-        } else {
-            info!("Starting fresh download of model {} from {}", model_id, url);
-            0
-        };
-
-        // Mark as downloading
-        {
-            let mut models = self.available_models.lock().unwrap();
-            if let Some(model) = models.get_mut(model_id) {
-                model.is_downloading = true;
+        if let Some(repo_id) = &model_info.model_scope_repo {
+            if let Some(files) = &model_info.model_scope_files {
+                return self
+                    .download_model_scope_model(&model_info, repo_id, files)
+                    .await;
             }
         }
 
-        // Create cancellation flag for this download
-        let cancel_flag = Arc::new(AtomicBool::new(false));
-        {
-            let mut flags = self.cancel_flags.lock().unwrap();
-            flags.insert(model_id.to_string(), cancel_flag.clone());
-        }
-
-        // Create HTTP client with range request for resuming
-        let client = reqwest::Client::new();
-        let mut request = client.get(&url);
-
-        if resume_from > 0 {
-            request = request.header("Range", format!("bytes={}-", resume_from));
-        }
-
-        let mut response = request.send().await?;
-
-        // If we tried to resume but server returned 200 (not 206 Partial Content),
-        // the server doesn't support range requests. Delete partial file and restart
-        // fresh to avoid file corruption (appending full file to partial).
-        if resume_from > 0 && response.status() == reqwest::StatusCode::OK {
-            warn!(
-                "Server doesn't support range requests for model {}, restarting download",
-                model_id
-            );
-            drop(response);
-            let _ = fs::remove_file(&partial_path);
-
-            // Reset resume_from since we're starting fresh
-            resume_from = 0;
-
-            // Restart download without range header
-            response = client.get(&url).send().await?;
-        }
-
-        // Check for success or partial content status
-        if !response.status().is_success()
-            && response.status() != reqwest::StatusCode::PARTIAL_CONTENT
-        {
-            // Mark as not downloading on error
-            {
-                let mut models = self.available_models.lock().unwrap();
-                if let Some(model) = models.get_mut(model_id) {
-                    model.is_downloading = false;
-                }
-            }
-            return Err(anyhow::anyhow!(
-                "Failed to download model: HTTP {}",
-                response.status()
-            ));
-        }
-
-        let total_size = if resume_from > 0 {
-            // For resumed downloads, add the resume point to content length
-            resume_from + response.content_length().unwrap_or(0)
-        } else {
-            response.content_length().unwrap_or(0)
-        };
-
-        let mut downloaded = resume_from;
-        let mut stream = response.bytes_stream();
-
-        // Open file for appending if resuming, or create new if starting fresh
-        let mut file = if resume_from > 0 {
-            std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&partial_path)?
-        } else {
-            std::fs::File::create(&partial_path)?
-        };
-
-        // Emit initial progress
-        let initial_progress = DownloadProgress {
-            model_id: model_id.to_string(),
-            downloaded,
-            total: total_size,
-            percentage: if total_size > 0 {
-                (downloaded as f64 / total_size as f64) * 100.0
-            } else {
-                0.0
-            },
-        };
-        let _ = self
-            .app_handle
-            .emit("model-download-progress", &initial_progress);
-
-        // Throttle progress events to max 10/sec (100ms intervals)
-        let mut last_emit = Instant::now();
-        let throttle_duration = Duration::from_millis(100);
-
-        // Download with progress
-        while let Some(chunk) = stream.next().await {
-            // Check if download was cancelled
-            if cancel_flag.load(Ordering::Relaxed) {
-                // Close the file before returning
-                drop(file);
-                info!("Download cancelled for: {}", model_id);
-
-                // Update state to mark as not downloading
-                {
-                    let mut models = self.available_models.lock().unwrap();
-                    if let Some(model) = models.get_mut(model_id) {
-                        model.is_downloading = false;
-                    }
-                }
-
-                // Remove cancel flag
-                {
-                    let mut flags = self.cancel_flags.lock().unwrap();
-                    flags.remove(model_id);
-                }
-
-                // Keep partial file for resume functionality
-                return Ok(());
-            }
-
-            let chunk = chunk.map_err(|e| {
-                // Mark as not downloading on error
-                {
-                    let mut models = self.available_models.lock().unwrap();
-                    if let Some(model) = models.get_mut(model_id) {
-                        model.is_downloading = false;
-                    }
-                }
-                e
-            })?;
-
-            file.write_all(&chunk)?;
-            downloaded += chunk.len() as u64;
-
-            let percentage = if total_size > 0 {
-                (downloaded as f64 / total_size as f64) * 100.0
-            } else {
-                0.0
-            };
-
-            // Emit progress event (throttled to avoid UI freeze)
-            if last_emit.elapsed() >= throttle_duration {
-                let progress = DownloadProgress {
-                    model_id: model_id.to_string(),
-                    downloaded,
-                    total: total_size,
-                    percentage,
-                };
-                let _ = self.app_handle.emit("model-download-progress", &progress);
-                last_emit = Instant::now();
-            }
-        }
-
-        // Emit final progress to ensure 100% is shown
-        let final_progress = DownloadProgress {
-            model_id: model_id.to_string(),
-            downloaded,
-            total: total_size,
-            percentage: if total_size > 0 {
-                (downloaded as f64 / total_size as f64) * 100.0
-            } else {
-                100.0
-            },
-        };
-        let _ = self
-            .app_handle
-            .emit("model-download-progress", &final_progress);
-
-        file.flush()?;
-        drop(file); // Ensure file is closed before moving
-
-        // Verify downloaded file size matches expected size
-        if total_size > 0 {
-            let actual_size = partial_path.metadata()?.len();
-            if actual_size != total_size {
-                // Download is incomplete/corrupted - delete partial and return error
-                let _ = fs::remove_file(&partial_path);
-                {
-                    let mut models = self.available_models.lock().unwrap();
-                    if let Some(model) = models.get_mut(model_id) {
-                        model.is_downloading = false;
-                    }
-                }
-                return Err(anyhow::anyhow!(
-                    "Download incomplete: expected {} bytes, got {} bytes",
-                    total_size,
-                    actual_size
-                ));
-            }
-        }
-
-        // Handle directory-based models (extract tar.gz) vs file-based models
-        if model_info.is_directory {
-            // Track that this model is being extracted
-            {
-                let mut extracting = self.extracting_models.lock().unwrap();
-                extracting.insert(model_id.to_string());
-            }
-
-            // Emit extraction started event
-            let _ = self.app_handle.emit("model-extraction-started", model_id);
-            info!("Extracting archive for directory-based model: {}", model_id);
-
-            // Use a temporary extraction directory to ensure atomic operations
-            let temp_extract_dir = self
-                .models_dir
-                .join(format!("{}.extracting", &model_info.filename));
-            let final_model_dir = self.models_dir.join(&model_info.filename);
-
-            // Clean up any previous incomplete extraction
-            if temp_extract_dir.exists() {
-                let _ = fs::remove_dir_all(&temp_extract_dir);
-            }
-
-            // Create temporary extraction directory
-            fs::create_dir_all(&temp_extract_dir)?;
-
-            // Open the downloaded tar.gz file
-            let tar_gz = File::open(&partial_path)?;
-            let tar = GzDecoder::new(tar_gz);
-            let mut archive = Archive::new(tar);
-
-            // Extract to the temporary directory first
-            archive.unpack(&temp_extract_dir).map_err(|e| {
-                let error_msg = format!("Failed to extract archive: {}", e);
-                // Clean up failed extraction
-                let _ = fs::remove_dir_all(&temp_extract_dir);
-                // Remove from extracting set
-                {
-                    let mut extracting = self.extracting_models.lock().unwrap();
-                    extracting.remove(model_id);
-                }
-                let _ = self.app_handle.emit(
-                    "model-extraction-failed",
-                    &serde_json::json!({
-                        "model_id": model_id,
-                        "error": error_msg
-                    }),
-                );
-                anyhow::anyhow!(error_msg)
-            })?;
-
-            // Find the actual extracted directory (archive might have a nested structure)
-            let extracted_dirs: Vec<_> = fs::read_dir(&temp_extract_dir)?
-                .filter_map(|entry| entry.ok())
-                .filter(|entry| entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
-                .collect();
-
-            if extracted_dirs.len() == 1 {
-                // Single directory extracted, move it to the final location
-                let source_dir = extracted_dirs[0].path();
-                if final_model_dir.exists() {
-                    fs::remove_dir_all(&final_model_dir)?;
-                }
-                fs::rename(&source_dir, &final_model_dir)?;
-                // Clean up temp directory
-                let _ = fs::remove_dir_all(&temp_extract_dir);
-            } else {
-                // Multiple items or no directories, rename the temp directory itself
-                if final_model_dir.exists() {
-                    fs::remove_dir_all(&final_model_dir)?;
-                }
-                fs::rename(&temp_extract_dir, &final_model_dir)?;
-            }
-
-            info!("Successfully extracted archive for model: {}", model_id);
-            // Remove from extracting set
-            {
-                let mut extracting = self.extracting_models.lock().unwrap();
-                extracting.remove(model_id);
-            }
-            // Emit extraction completed event
-            let _ = self.app_handle.emit("model-extraction-completed", model_id);
-
-            // Remove the downloaded tar.gz file
-            let _ = fs::remove_file(&partial_path);
-        } else {
-            // Move partial file to final location for file-based models
-            fs::rename(&partial_path, &model_path)?;
-        }
-
-        // Update download status
-        {
-            let mut models = self.available_models.lock().unwrap();
-            if let Some(model) = models.get_mut(model_id) {
-                model.is_downloading = false;
-                model.is_downloaded = true;
-                model.partial_size = 0;
-            }
-        }
-
-        // Remove cancel flag on successful completion
-        {
-            let mut flags = self.cancel_flags.lock().unwrap();
-            flags.remove(model_id);
-        }
-
-        // Emit completion event
-        let _ = self.app_handle.emit("model-download-complete", model_id);
-
-        info!(
-            "Successfully downloaded model {} to {:?}",
-            model_id, model_path
-        );
-
-        Ok(())
+        Err(anyhow::anyhow!(
+            "Model {} doesn't have a ModelScope repo defined",
+            model_id
+        ))
     }
 
-    async fn download_sense_voice_model(&self, model_info: &ModelInfo) -> Result<()> {
+    async fn download_model_scope_model(
+        &self,
+        model_info: &ModelInfo,
+        repo_id: &str,
+        required_files: &[String],
+    ) -> Result<()> {
         let model_id = &model_info.id;
         let model_dir = self.models_dir.join(&model_info.filename);
 
@@ -755,9 +426,13 @@ impl ModelManager {
             fs::create_dir_all(&model_dir)?;
         }
 
-        let all_files_exist = SENSE_VOICE_REQUIRED_FILES
-            .iter()
-            .all(|file| model_dir.join(file).exists());
+        let all_files_exist = required_files.iter().all(|file| {
+            let f = std::path::Path::new(file)
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or(file);
+            model_dir.join(f).exists()
+        });
         if all_files_exist {
             self.update_download_status()?;
             let progress = DownloadProgress {
@@ -787,8 +462,12 @@ impl ModelManager {
         let progress_by_file = Arc::new(Mutex::new(HashMap::new()));
         {
             let mut progress = progress_by_file.lock().unwrap();
-            for file in SENSE_VOICE_REQUIRED_FILES {
-                let file_path = model_dir.join(file);
+            for file in required_files {
+                let file_name_only = std::path::Path::new(file)
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .unwrap_or(file);
+                let file_path = model_dir.join(file_name_only);
                 if file_path.exists() {
                     progress.insert(file.to_string(), (1, 1));
                 } else {
@@ -813,38 +492,64 @@ impl ModelManager {
             flags.remove(model_id);
         };
 
-        for file_name in SENSE_VOICE_REQUIRED_FILES {
+        for file_name in required_files {
             if cancel_flag.load(Ordering::Relaxed) {
                 clear_downloading_state();
                 return Ok(());
             }
 
-            let target_file = model_dir.join(file_name);
+            // Flatten files: use only the filename for local storage
+            let file_name_only = std::path::Path::new(file_name)
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or(file_name);
+            let target_file = model_dir.join(file_name_only);
+
             if target_file.exists() {
                 continue;
             }
 
-            if let Err(e) = ModelScope::download_single_file_with_callback(
-                SENSE_VOICE_REPO_ID,
+            let download_fut = ModelScope::download_single_file_with_callback(
+                repo_id,
                 file_name,
                 self.models_dir.clone(),
                 callback.clone(),
-            )
-            .await
-            {
+            );
+
+            let cancel_flag_clone = cancel_flag.clone();
+            let cancel_fut = async move {
+                loop {
+                    if cancel_flag_clone.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                }
+            };
+
+            let download_res = tokio::select! {
+                res = download_fut => res,
+                _ = cancel_fut => {
+                    info!("Download interrupted by cancel flag for {}", file_name);
+                    clear_downloading_state();
+                    // Optionally clean up partial file if needed, modelscope-ng usually temp files
+                    return Ok(());
+                }
+            };
+
+            if let Err(e) = download_res {
                 clear_downloading_state();
                 return Err(anyhow::anyhow!(
-                    "Failed to download SenseVoice file {}: {}",
+                    "Failed to download ModelScope file {}: {}",
                     file_name,
                     e
                 ));
             }
 
-            let downloaded_path = self.models_dir.join(SENSE_VOICE_REPO_ID).join(file_name);
+            let downloaded_path = self.models_dir.join(repo_id).join(file_name);
             if !downloaded_path.exists() {
                 clear_downloading_state();
                 return Err(anyhow::anyhow!(
-                    "Downloaded SenseVoice file not found: {}",
+                    "Downloaded ModelScope file not found: {}",
                     file_name
                 ));
             }
@@ -859,7 +564,7 @@ impl ModelManager {
             }
         }
 
-        let _ = fs::remove_dir_all(self.models_dir.join(SENSE_VOICE_REPO_ID));
+        let _ = fs::remove_dir_all(self.models_dir.join(repo_id));
 
         {
             let mut models = self.available_models.lock().unwrap();
@@ -984,15 +689,20 @@ impl ModelManager {
         if model_info.is_directory {
             // For directory-based models, ensure the directory exists and is complete
             if model_path.exists() && model_path.is_dir() && !partial_path.exists() {
-                if model_id == "sense-voice-int8"
-                    && !SENSE_VOICE_REQUIRED_FILES
-                        .iter()
-                        .all(|file| model_path.join(file).exists())
-                {
-                    return Err(anyhow::anyhow!(
-                        "Complete SenseVoice model files not found: {}",
-                        model_id
-                    ));
+                if let Some(files) = &model_info.model_scope_files {
+                    if !files.iter().all(|file| {
+                        let f = std::path::Path::new(file)
+                            .file_name()
+                            .and_then(|f| f.to_str())
+                            .unwrap_or(file);
+                        model_path.join(f).exists()
+                    }) {
+                        return Err(anyhow::anyhow!(
+                            "Complete model files not found for {}: {:?}",
+                            model_id,
+                            files
+                        ));
+                    }
                 }
                 Ok(model_path)
             } else {

@@ -50,3 +50,25 @@ pub fn set_local_llm_unload_timeout(app: AppHandle, timeout: LocalLlmUnloadTimeo
     settings.local_llm_unload_timeout = timeout;
     write_settings(&app, settings);
 }
+
+#[tauri::command]
+#[specta::specta]
+pub async fn cancel_local_llm_download(
+    llm_manager: State<'_, Arc<LlmManager>>,
+    model_id: String,
+) -> Result<(), String> {
+    llm_manager
+        .cancel_download(&model_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_local_llm(
+    llm_manager: State<'_, Arc<LlmManager>>,
+    model_id: String,
+) -> Result<(), String> {
+    llm_manager
+        .delete_model(&model_id)
+        .map_err(|e| e.to_string())
+}

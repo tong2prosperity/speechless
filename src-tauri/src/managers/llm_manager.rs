@@ -189,13 +189,32 @@ impl LlmManager {
         };
 
         // Download directly to our target directory so the final file is models_dir/model_id
-        let res = ModelScope::download_single_file_with_callback(
+        let download_fut = ModelScope::download_single_file_with_callback(
             repo_id,
             file_name,
             self.models_dir.clone(),
             callback,
-        )
-        .await;
+        );
+
+        let cancel_flag_clone = cancel_flag.clone();
+        let cancel_fut = async move {
+            loop {
+                if cancel_flag_clone.load(Ordering::Relaxed) {
+                    break;
+                }
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            }
+        };
+
+        let res = tokio::select! {
+            r = download_fut => r,
+            _ = cancel_fut => {
+                info!("Download interrupted by cancel flag for {}", file_name);
+                let mut flags = self.cancel_flags.lock().unwrap();
+                flags.remove(target_model_id);
+                return Ok(());
+            }
+        };
 
         match res {
             Ok(_) => {
@@ -212,6 +231,8 @@ impl LlmManager {
             }
             Err(e) => {
                 error!("Failed to download LLM: {}", e);
+                let mut flags = self.cancel_flags.lock().unwrap();
+                flags.remove(target_model_id);
                 return Err(anyhow::anyhow!("Download failed: {}", e));
             }
         }
@@ -222,6 +243,34 @@ impl LlmManager {
             flags.remove(target_model_id);
         }
 
+        Ok(())
+    }
+
+    pub fn cancel_download(&self, target_model_id: &str) -> anyhow::Result<()> {
+        let flags = self.cancel_flags.lock().unwrap();
+        if let Some(flag) = flags.get(target_model_id) {
+            flag.store(true, Ordering::Relaxed);
+            info!("Cancellation flag set for LLM: {}", target_model_id);
+        }
+        let _ = self
+            .app_handle
+            .emit("llm-download-cancelled", target_model_id);
+        Ok(())
+    }
+
+    pub fn delete_model(&self, target_model_id: &str) -> anyhow::Result<()> {
+        let model_info = AVAILABLE_LLM_MODELS
+            .iter()
+            .find(|m| m.id == target_model_id)
+            .ok_or_else(|| anyhow::anyhow!("Model not found: {}", target_model_id))?;
+
+        let target_path = self.models_dir.join(&model_info.file_name);
+        if target_path.exists() {
+            std::fs::remove_file(&target_path)?;
+            info!("Deleted LLM model: {}", target_model_id);
+        }
+
+        let _ = self.app_handle.emit("llm-model-deleted", target_model_id);
         Ok(())
     }
 
