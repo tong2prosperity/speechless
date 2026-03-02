@@ -244,6 +244,29 @@ fn trigger_update_check(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(target_os = "windows")]
+fn init_dll_search_path(app_handle: &tauri::AppHandle) {
+    // Get the resource directory where the DLLs are packaged
+    if let Ok(resource_dir) = app_handle.path().resource_dir() {
+        // Log for debugging
+        log::info!("Adding resource directory to PATH: {:?}", resource_dir);
+
+        // Add the resource directory to the system PATH for DLL lookups
+        if let Ok(path) = std::env::var("PATH") {
+            let mut paths = std::env::split_paths(&path).collect::<Vec<_>>();
+            // Insert at the beginning to prioritize our packaged DLLs
+            paths.insert(0, resource_dir);
+
+            if let Ok(new_path) = std::env::join_paths(paths) {
+                std::env::set_var("PATH", new_path);
+                log::info!("Successfully updated PATH for DLL loading");
+            }
+        }
+    } else {
+        log::warn!("Could not determine resource directory for DLL loading");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run(cli_args: CliArgs) {
     // Parse console logging directives from RUST_LOG, falling back to info-level logging
@@ -417,6 +440,9 @@ pub fn run(cli_args: CliArgs) {
         ))
         .manage(cli_args.clone())
         .setup(move |app| {
+            #[cfg(target_os = "windows")]
+            init_dll_search_path(&app.handle());
+
             let mut settings = get_settings(&app.handle());
 
             // CLI --debug flag overrides debug_mode and log level (runtime-only, not persisted)

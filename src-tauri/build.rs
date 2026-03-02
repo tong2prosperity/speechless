@@ -1,10 +1,51 @@
 fn main() {
+    #[cfg(target_os = "windows")]
+    copy_dlls_to_resources();
+
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     build_apple_intelligence_bridge();
 
     generate_tray_translations();
 
     tauri_build::build()
+}
+
+#[cfg(target_os = "windows")]
+fn copy_dlls_to_resources() {
+    use std::fs;
+    use std::path::Path;
+
+    let dlls = [
+        "sherpa-onnx-c-api.dll",
+        "sherpa-onnx-cxx-api.dll",
+        "onnxruntime.dll",
+        "onnxruntime_providers_shared.dll",
+        "DirectML.dll",
+    ];
+
+    let res_dir = Path::new("resources");
+    if !res_dir.exists() {
+        fs::create_dir_all(res_dir).unwrap();
+    }
+
+    // Since build.rs runs during build, target/release might not be populated yet if this is a fresh build,
+    // but typically developers build once before bundling.
+    // We try to find them in the expected output directory.
+    let profile = std::env::var("PROFILE").unwrap_or_else(|_| "release".into());
+    let target_dir = Path::new("target").join(profile);
+    
+    for dll in dlls {
+        let src = target_dir.join(dll);
+        if src.exists() {
+            let dest = res_dir.join(dll);
+            match fs::copy(&src, &dest) {
+                Ok(_) => println!("cargo:warning=Successfully copied {} to resources/", dll),
+                Err(e) => println!("cargo:warning=Failed to copy {}: {}", dll, e),
+            }
+        } else {
+            println!("cargo:warning=Source DLL not found at {:?}. Please ensure you have built the project once.", src);
+        }
+    }
 }
 
 /// Generate tray menu translations from frontend locale files.

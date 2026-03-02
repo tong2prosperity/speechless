@@ -1473,7 +1473,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330c60081dcc4c72131f8eb70510f1ac07223e5d4163db481a04a0befcffa412"
 dependencies = [
- "libloading 0.8.9",
+ "libloading 0.7.4",
 ]
 
 [[package]]
@@ -4157,7 +4157,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -5662,8 +5662,8 @@ dependencies = [
 
 [[package]]
 name = "sherpa-rs"
-version = "0.6.9"
-source = "git+https://github.com/NaviProj/sherpa-rs-new.git?branch=main#461203ab74919df5e74cb677aa817b1126416ac2"
+version = "0.7.0"
+source = "git+https://github.com/NaviProj/sherpa-rs-new.git?branch=main#ce50432d46dae83d46e87dd5adde18d26e154a09"
 dependencies = [
  "eyre",
  "hound",
@@ -5673,8 +5673,8 @@ dependencies = [
 
 [[package]]
 name = "sherpa-rs-sys"
-version = "0.6.8"
-source = "git+https://github.com/NaviProj/sherpa-rs-new.git?branch=main#461203ab74919df5e74cb677aa817b1126416ac2"
+version = "0.7.0"
+source = "git+https://github.com/NaviProj/sherpa-rs-new.git?branch=main#ce50432d46dae83d46e87dd5adde18d26e154a09"
 dependencies = [
  "bindgen 0.69.5",
  "bzip2",
