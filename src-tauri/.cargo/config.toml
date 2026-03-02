@@ -1,0 +1,20 @@
+[env]
+CCACHE_DIR = { value = "target/ccache", relative = true }
+CCACHE_TEMPDIR = { value = "target/ccache/tmp", relative = true }
+MACOSX_DEPLOYMENT_TARGET = "10.15"
+
+[target.aarch64-apple-darwin]
+rustflags = [
+    "-C",
+    "link-arg=-Wl,-rpath,@executable_path/",
+    "-C",
+    "link-arg=-Wl,-rpath,@executable_path/../Frameworks/",
+]
+
+[target.x86_64-apple-darwin]
+rustflags = [
+    "-C",
+    "link-arg=-Wl,-rpath,@executable_path/",
+    "-C",
+    "link-arg=-Wl,-rpath,@executable_path/../Frameworks/",
+]

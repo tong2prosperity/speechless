@@ -78,7 +78,7 @@ modelscope-ng = "0.2.0"
 llama-cpp-2 = "0.1.136"
 async-trait = "0.1.89"
 tracing = "0.1.44"
-sherpa-rs = { git = "https://github.com/NaviProj/sherpa-rs-new.git", branch = "main"}
+sherpa-rs = { git = "https://github.com/NaviProj/sherpa-rs-new.git", branch = "main" }
 
 [target.'cfg(unix)'.dependencies]
 signal-hook = "0.3"

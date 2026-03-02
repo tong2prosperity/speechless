@@ -54,8 +54,13 @@
     ],
     "macOS": {
       "files": {},
-      "hardenedRuntime": true,
-      "minimumSystemVersion": "10.13",
+      "frameworks": [
+        "target/release/libonnxruntime.1.23.2.dylib",
+        "target/release/libsherpa-onnx-c-api.dylib",
+        "target/release/libsherpa-onnx-cxx-api.dylib"
+      ],
+      "hardenedRuntime": false,
+      "minimumSystemVersion": "10.15",
       "signingIdentity": "-",
       "entitlements": "Entitlements.plist"
     },
