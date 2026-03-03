@@ -117,7 +117,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
                 >
                   <span className="truncate">{option.label}</span>
                 </button>
-              )
+              ),
             )
           )}
         </div>

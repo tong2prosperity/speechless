@@ -192,9 +192,12 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
     }
 
     if (llmDownloading && llmDownloadProgress) {
-        return t("modelSelector.downloading", { 
-          percentage: Math.max(0, Math.min(100, Math.round(llmDownloadProgress.percentage)))
-        });
+      return t("modelSelector.downloading", {
+        percentage: Math.max(
+          0,
+          Math.min(100, Math.round(llmDownloadProgress.percentage)),
+        ),
+      });
     }
 
     const currentModelInfo = models.find((m) => m.id === displayModelId);
@@ -234,7 +237,8 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
   // Derive display status from model status + store state
   const getDisplayStatus = (): ModelStatus => {
     if (Object.keys(extractingModels).length > 0) return "extracting";
-    if (Object.keys(downloadProgress).length > 0 || llmDownloading) return "downloading";
+    if (Object.keys(downloadProgress).length > 0 || llmDownloading)
+      return "downloading";
     return modelStatus;
   };
 

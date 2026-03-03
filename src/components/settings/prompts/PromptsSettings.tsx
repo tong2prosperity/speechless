@@ -9,11 +9,7 @@ import {
 } from "@/lib/utils/keyboard";
 
 import { Alert } from "../../ui/Alert";
-import {
-  SettingContainer,
-  SettingsGroup,
-  Textarea,
-} from "@/components/ui";
+import { SettingContainer, SettingsGroup, Textarea } from "@/components/ui";
 import { Button } from "../../ui/Button";
 import { ResetButton } from "../../ui/ResetButton";
 import { Input } from "../../ui/Input";
@@ -167,7 +163,8 @@ const PromptsSettingsPromptsComponent: React.FC = () => {
   const [draftName, setDraftName] = useState("");
   const [draftText, setDraftText] = useState("");
   const [draftBinding, setDraftBinding] = useState("");
-  const [isRecordingCreateBinding, setIsRecordingCreateBinding] = useState(false);
+  const [isRecordingCreateBinding, setIsRecordingCreateBinding] =
+    useState(false);
   const [createKeyPressed, setCreateKeyPressed] = useState<string[]>([]);
   const [createRecordedKeys, setCreateRecordedKeys] = useState<string[]>([]);
   const osType = useOsType();
@@ -271,8 +268,12 @@ const PromptsSettingsPromptsComponent: React.FC = () => {
       const rawKey = getKeyName(e, osType);
       const key = normalizeKey(rawKey);
 
-      setCreateKeyPressed((prev) => (prev.includes(key) ? prev : [...prev, key]));
-      setCreateRecordedKeys((prev) => (prev.includes(key) ? prev : [...prev, key]));
+      setCreateKeyPressed((prev) =>
+        prev.includes(key) ? prev : [...prev, key],
+      );
+      setCreateRecordedKeys((prev) =>
+        prev.includes(key) ? prev : [...prev, key],
+      );
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -334,9 +335,7 @@ const PromptsSettingsPromptsComponent: React.FC = () => {
   return (
     <SettingContainer
       title={t("settings.postProcessing.prompts.shortcuts.title")}
-      description={t(
-        "settings.postProcessing.prompts.shortcuts.description",
-      )}
+      description={t("settings.postProcessing.prompts.shortcuts.description")}
       descriptionMode="tooltip"
       layout="stacked"
       grouped={true}
@@ -547,14 +546,10 @@ const PromptsSettingsPromptsComponent: React.FC = () => {
   );
 };
 
-export const PromptsSettingsApi = React.memo(
-  PromptsSettingsApiComponent,
-);
+export const PromptsSettingsApi = React.memo(PromptsSettingsApiComponent);
 PromptsSettingsApi.displayName = "PromptsSettingsApi";
 
-export const PromptsSettingsList = React.memo(
-  PromptsSettingsPromptsComponent,
-);
+export const PromptsSettingsList = React.memo(PromptsSettingsPromptsComponent);
 PromptsSettingsList.displayName = "PromptsSettingsList";
 
 export const PromptsSettings: React.FC = () => {

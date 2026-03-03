@@ -32,7 +32,8 @@ export const LocalLlmUnloadTimeoutSetting: React.FC<
   ];
 
   const currentValue =
-    (getSetting("local_llm_unload_timeout") as LocalLlmUnloadTimeout) ?? "hour1";
+    (getSetting("local_llm_unload_timeout") as LocalLlmUnloadTimeout) ??
+    "hour1";
 
   const handleChange = async (value: string | null) => {
     if (!value) return;

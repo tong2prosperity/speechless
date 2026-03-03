@@ -84,14 +84,22 @@ export const usePostProcessProviderState = (): PostProcessProviderState => {
     });
 
     const options: DropdownOption[] = [];
-    
+
     if (localProviders.length > 0) {
-      options.push({ value: "header_local", label: "Local Models", isHeader: true });
+      options.push({
+        value: "header_local",
+        label: "Local Models",
+        isHeader: true,
+      });
       options.push(...localProviders);
     }
-    
+
     if (cloudProviders.length > 0) {
-      options.push({ value: "header_cloud", label: "Cloud APIs", isHeader: true });
+      options.push({
+        value: "header_cloud",
+        label: "Cloud APIs",
+        isHeader: true,
+      });
       options.push(...cloudProviders);
     }
 

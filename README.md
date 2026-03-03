@@ -63,11 +63,11 @@ speechless is built as a Tauri application combining:
 ### Local LLM Integration (navi-llm)
 
 speechless includes **navi-llm**, a powerful local inference engine that allows you to:
+
 - Run GGUF models locally for maximum privacy
 - Perform advanced post-processing on transcriptions (e.g., grammar correction, summarization)
 - Interact with local AI models without any cloud dependency
 - Support for system prompts and multi-turn conversations
-
 
 ### Debug Mode
 
@@ -146,6 +146,7 @@ For reliable text input on Linux, install the appropriate tool for your display 
 ### System Requirements/Recommendations
 
 **CPU-only operation** - runs on a wide variety of hardware
+
 - **Minimum**: Intel Skylake (6th gen) or equivalent AMD processors
 - **Automatic language detection** - no manual language selection required
 

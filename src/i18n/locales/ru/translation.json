@@ -478,11 +478,6 @@
         "description": "Просмотреть исходный код и внести свой вклад",
         "button": "Посмотреть на GitHub"
       },
-      "supportDevelopment": {
-        "title": "Поддержка развития",
-        "description": "Помогите нам продолжить создание Handy",
-        "button": "Пожертвовать"
-      },
       "acknowledgments": {
         "title": "Благодарности",
         "whisper": {

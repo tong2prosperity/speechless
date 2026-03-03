@@ -33,7 +33,7 @@ fn copy_dlls_to_resources() {
     // We try to find them in the expected output directory.
     let profile = std::env::var("PROFILE").unwrap_or_else(|_| "release".into());
     let target_dir = Path::new("target").join(profile);
-    
+
     for dll in dlls {
         let src = target_dir.join(dll);
         if src.exists() {

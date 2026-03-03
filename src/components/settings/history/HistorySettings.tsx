@@ -203,7 +203,11 @@ export const HistorySettings: React.FC = () => {
                 key={entry.id}
                 entry={entry}
                 onToggleSaved={() => toggleSaved(entry.id)}
-                onCopyText={() => copyToClipboard(entry.post_processed_text || entry.transcription_text)}
+                onCopyText={() =>
+                  copyToClipboard(
+                    entry.post_processed_text || entry.transcription_text,
+                  )
+                }
                 getAudioUrl={getAudioUrl}
                 deleteAudio={deleteAudioEntry}
               />
@@ -308,7 +312,10 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
           </div>
           <div className="flex flex-col border-l-2 border-mid-gray/30 pl-3 mt-1">
             <span className="text-xs font-semibold text-text/50 uppercase tracking-wide mb-1">
-              {t("settings.history.originalTranscript", "Original Transcription")}
+              {t(
+                "settings.history.originalTranscript",
+                "Original Transcription",
+              )}
             </span>
             <p className="italic text-text/70 text-sm select-text cursor-text">
               {entry.transcription_text}

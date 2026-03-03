@@ -16,9 +16,9 @@ mod tauri_impl;
 use log::{error, info, warn};
 use serde::Serialize;
 use specta::Type;
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
-use std::sync::Arc;
 
 use crate::settings::{
     self, get_settings, AutoSubmitKey, ClipboardHandling, KeyboardImplementation, LLMPrompt,
@@ -818,6 +818,18 @@ pub fn change_post_process_enabled_setting(app: AppHandle, enabled: bool) -> Res
 
 #[tauri::command]
 #[specta::specta]
+pub fn change_default_post_process_prompt_setting(
+    app: AppHandle,
+    prompt: String,
+) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    settings.default_post_process_prompt = prompt;
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn change_experimental_enabled_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
     let mut settings = settings::get_settings(&app);
     settings.experimental_enabled = enabled;
@@ -985,7 +997,9 @@ pub fn add_post_process_prompt_with_binding(
     register_shortcut(&app, prompt_binding.clone())?;
 
     let mut updated_settings = settings;
-    updated_settings.post_process_prompts.push(new_prompt.clone());
+    updated_settings
+        .post_process_prompts
+        .push(new_prompt.clone());
     updated_settings.bindings.insert(id, prompt_binding);
     settings::write_settings(&app, updated_settings);
 

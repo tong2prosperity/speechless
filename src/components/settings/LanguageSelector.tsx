@@ -117,7 +117,9 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
             onClick={handleToggle}
             disabled={isUpdating("selected_language")}
           >
-            <span className="truncate text-zinc-900">{selectedLanguageName}</span>
+            <span className="truncate text-zinc-900">
+              {selectedLanguageName}
+            </span>
             <svg
               className={`w-4 h-4 ms-2 text-zinc-500 transition-transform duration-200 ${
                 isOpen ? "transform rotate-180" : ""

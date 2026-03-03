@@ -60,14 +60,18 @@ export const AdvancedSettings: React.FC = () => {
         />
         <SettingContainer
           title={t("sidebar.prompts")}
-          description={t("settings.postProcessing.prompts.selectedPrompt.description")}
+          description={t(
+            "settings.postProcessing.prompts.selectedPrompt.description",
+          )}
           descriptionMode="tooltip"
           layout="horizontal"
           grouped={true}
         >
           <Button
             onClick={() => {
-              window.dispatchEvent(new CustomEvent('change-section', { detail: 'prompts' }));
+              window.dispatchEvent(
+                new CustomEvent("change-section", { detail: "prompts" }),
+              );
             }}
             variant="secondary"
             size="md"

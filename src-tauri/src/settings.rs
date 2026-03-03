@@ -393,7 +393,7 @@ pub struct AppSettings {
 }
 
 fn default_model() -> String {
-    "".to_string()
+    "sense-voice-int8".to_string()
 }
 
 fn default_always_on_microphone() -> bool {
@@ -607,7 +607,7 @@ fn default_post_process_prompts() -> Vec<LLMPrompt> {
 }
 
 fn default_default_post_process_prompt() -> String {
-    "您是 ASR 口语文本规整助手，严格执行以下规则：\n 最高不可突破准则：100% 完整保留用户的原始意图、全部关键信息，严禁任何增删、篡改、引申用户本意的行为；\n 精准剔除文本中所有无意义的口癖、语气填充词（嗯、啊、呃、哦、那个、就是说等）、重复冗余的口语内容；\n 修正口语化的断句混乱、语序颠倒问题，让语句通顺连贯、符合正常表达逻辑；\n 仅输出处理后的最终文本，不得添加任何额外解释、标注、话术。".to_string()
+    "你是 ASR 口语文本规整助手，严格执行以下规则：\n 最高不可突破准则：100% 完整保留用户的原始意图、全部关键信息，严禁任何增删、篡改、引申用户本意的行为\n 不要回答用户问题 \n 精准剔除文本中所有无意义的口癖、语气填充词（嗯、啊、呃、哦、那个、就是说等）、重复冗余的口语内容\n 修正口语化的断句混乱、语序颠倒问题，让语句通顺连贯、符合正常表达逻辑\n 仅输出处理后的最终文本，不得添加任何额外解释、标注、话术。".to_string()
 }
 
 fn default_typing_tool() -> TypingTool {
@@ -713,7 +713,7 @@ pub fn get_default_settings() -> AppSettings {
         start_hidden: default_start_hidden(),
         autostart_enabled: default_autostart_enabled(),
         update_checks_enabled: default_update_checks_enabled(),
-        selected_model: "".to_string(),
+        selected_model: "sense-voice-int8".to_string(),
         always_on_microphone: false,
         selected_microphone: None,
         clamshell_microphone: None,

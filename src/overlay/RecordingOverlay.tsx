@@ -22,9 +22,13 @@ const RecordingOverlay: React.FC = () => {
   const direction = getLanguageDirection(i18n.language);
 
   useEffect(() => {
+    let unlistenShow: () => void;
+    let unlistenHide: () => void;
+    let unlistenLevel: () => void;
+
     const setupEventListeners = async () => {
       // Listen for show-overlay event from Rust
-      const unlistenShow = await listen("show-overlay", async (event) => {
+      unlistenShow = await listen("show-overlay", async (event) => {
         // Sync language from settings each time overlay is shown
         await syncLanguageFromSettings();
         const overlayState = event.payload as OverlayState;
@@ -33,33 +37,33 @@ const RecordingOverlay: React.FC = () => {
       });
 
       // Listen for hide-overlay event from Rust
-      const unlistenHide = await listen("hide-overlay", () => {
+      unlistenHide = await listen("hide-overlay", () => {
         setIsVisible(false);
       });
 
       // Listen for mic-level updates
-      const unlistenLevel = await listen<number[]>("mic-level", (event) => {
+      unlistenLevel = await listen<number[]>("mic-level", (event) => {
         const newLevels = event.payload as number[];
 
-        // Apply smoothing to reduce jitter
+        // Apply smoothing to reduce jitter and carefully amplify
         const smoothed = smoothedLevelsRef.current.map((prev, i) => {
-          const target = newLevels[i] || 0;
-          return prev * 0.7 + target * 0.3; // Smooth transition
+          const target = Math.min(1.0, (newLevels[i] || 0) * 1.5); // Amplify slightly for better UI visibility
+          return prev * 0.5 + target * 0.5; // Make the UI transition slightly snappier
         });
 
         smoothedLevelsRef.current = smoothed;
         setLevels(smoothed.slice(0, 9));
       });
-
-      // Cleanup function
-      return () => {
-        unlistenShow();
-        unlistenHide();
-        unlistenLevel();
-      };
     };
 
     setupEventListeners();
+
+    // Cleanup function
+    return () => {
+      if (unlistenShow) unlistenShow();
+      if (unlistenHide) unlistenHide();
+      if (unlistenLevel) unlistenLevel();
+    };
   }, []);
 
   const getIcon = () => {
@@ -100,9 +104,10 @@ const RecordingOverlay: React.FC = () => {
                 key={i}
                 className="bar"
                 style={{
-                  height: `${Math.min(20, 4 + Math.pow(v, 0.7) * 16)}px`, // Cap at 20px max height
-                  transition: "height 60ms ease-out, opacity 120ms ease-out",
-                  opacity: Math.max(0.2, v * 1.7), // Minimum opacity for visibility
+                  height: `${Math.min(24, 4 + Math.pow(v, 0.6) * 20)}px`, // Increase max height slightly and use stronger curve
+                  transition:
+                    "height 60ms cubic-bezier(0.4, 0, 0.2, 1), opacity 120ms ease-out", // Snappier bezier curve
+                  opacity: Math.max(0.3, 0.3 + v * 1.4), // Minimum opacity for visibility scaled properly
                 }}
               />
             ))}

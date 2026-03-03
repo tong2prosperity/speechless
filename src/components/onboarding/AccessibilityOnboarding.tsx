@@ -313,7 +313,7 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
             </div>
           </div>
         </div>
-        
+
         {import.meta.env.DEV && (
           <button
             onClick={onComplete}

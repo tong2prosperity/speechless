@@ -185,9 +185,34 @@ impl TranscriptionManager {
         }
     }
 
-    pub fn load_model(&self, model_id: &str) -> Result<()> {
+    pub fn load_model(&self, model_id: &str) -> std::result::Result<(), anyhow::Error> {
+        // Enforce sequential loading to prevent concurrent loading causing OOM crashes
+        {
+            let mut is_loading = self.is_loading.lock().unwrap();
+            while *is_loading {
+                is_loading = self.loading_condvar.wait(is_loading).unwrap();
+            }
+            *is_loading = true;
+        }
+
+        let result = self.load_model_inner(model_id);
+
+        {
+            let mut is_loading = self.is_loading.lock().unwrap();
+            *is_loading = false;
+            self.loading_condvar.notify_all();
+        }
+
+        result
+    }
+
+    fn load_model_inner(&self, model_id: &str) -> Result<()> {
         let load_start = std::time::Instant::now();
         debug!("Starting to load model: {}", model_id);
+
+        // Unload the current model FIRST to avoid doubling memory consumption
+        // (Prevents OOM crashes when switching large models)
+        let _ = self.unload_model();
 
         // Emit loading started event
         let _ = self.app_handle.emit(
@@ -324,21 +349,16 @@ impl TranscriptionManager {
 
     /// Kicks off the model loading in a background thread if it's not already loaded
     pub fn initiate_model_load(&self) {
-        let mut is_loading = self.is_loading.lock().unwrap();
-        if *is_loading || self.is_model_loaded() {
+        if self.is_model_loaded() {
             return;
         }
 
-        *is_loading = true;
         let self_clone = self.clone();
         thread::spawn(move || {
             let settings = get_settings(&self_clone.app_handle);
             if let Err(e) = self_clone.load_model(&settings.selected_model) {
                 error!("Failed to load model: {}", e);
             }
-            let mut is_loading = self_clone.is_loading.lock().unwrap();
-            *is_loading = false;
-            self_clone.loading_condvar.notify_all();
         });
     }
 
@@ -422,9 +442,18 @@ impl TranscriptionManager {
 
             match transcribe_result {
                 Ok(inner_result) => {
-                    // Success or normal error — put the engine back
+                    // Success or normal error — check if we should put the engine back
                     let mut engine_guard = self.lock_engine();
-                    *engine_guard = Some(engine);
+                    let current_model = self.current_model_id.lock().unwrap();
+
+                    if current_model.is_some() && engine_guard.is_none() {
+                        // The active model is still the one we used, and no new model was loaded into the mutex
+                        *engine_guard = Some(engine);
+                    } else {
+                        // Either the model was unloaded (current_model is None)
+                        // OR a new model was loaded (engine_guard is Some)
+                        debug!("Engine state changed during transcription (model unloaded or switched). Discarding old engine to prevent state corruption.");
+                    }
                     inner_result?
                 }
                 Err(panic_payload) => {
