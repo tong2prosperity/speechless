@@ -66,8 +66,11 @@ const LlmSelector: React.FC = () => {
   };
 
   const handleSelect = async (modelId: string) => {
-    await selectLlmModel(modelId);
+    const success = await selectLlmModel(modelId);
     setShowDropdown(false);
+    if (!success) {
+      console.error("Failed to switch LLM model:", modelId);
+    }
   };
 
   return (

@@ -359,6 +359,7 @@ export const useModelStore = create<ModelsStore>()(
 
     selectLlmModel: async (modelId: string) => {
       try {
+        set({ error: null });
         const result = await commands.changePostProcessModelSetting(
           "navi_llm",
           modelId,
@@ -368,10 +369,12 @@ export const useModelStore = create<ModelsStore>()(
           // Re-check download status when switching models
           await get().checkLlmStatus();
           return true;
+        } else {
+          set({ error: `Failed to switch to LLM model: ${result.error}` });
+          return false;
         }
-        return false;
       } catch (err) {
-        console.error("Failed to select LLM model:", err);
+        set({ error: `Failed to switch to LLM model: ${err}` });
         return false;
       }
     },
