@@ -6,6 +6,9 @@ use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
 
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use ed25519_dalek::Verifier;
+
 pub const APPLE_INTELLIGENCE_PROVIDER_ID: &str = "apple_intelligence";
 pub const APPLE_INTELLIGENCE_DEFAULT_MODEL_ID: &str = "Apple Intelligence";
 
@@ -390,6 +393,10 @@ pub struct AppSettings {
     #[serde(default = "default_typing_tool")]
     pub typing_tool: TypingTool,
     pub external_script_path: Option<String>,
+    #[serde(default)]
+    pub invitation_code: Option<String>,
+    #[serde(default)]
+    pub is_unlocked: bool,
 }
 
 fn default_model() -> String {
@@ -670,6 +677,62 @@ fn ensure_post_process_defaults(settings: &mut AppSettings) -> bool {
     changed
 }
 
+const PUBLIC_KEY_BYTES: &[u8; 32] = &[
+    0xb4, 0x1c, 0x3c, 0x2f, 0xf8, 0x90, 0x0d, 0x1b, 0x52, 0x0e, 0x7a, 0x87, 0x23, 0x7c, 0x5a, 0x05,
+    0xb1, 0x60, 0xda, 0xdf, 0x57, 0x4e, 0xb5, 0xc3, 0x8e, 0xcb, 0x30, 0xa7, 0xcb, 0xea, 0xf1, 0x3d,
+];
+
+pub fn is_valid_invitation_code(code: &str) -> bool {
+    // For legacy/test codes
+    let valid_codes = ["HANDY-PRO-2026", "SPECIAL-ACCESS", "ANTIGRAVITY"];
+    if valid_codes.contains(&code) {
+        return true;
+    }
+
+    let Ok(decoded) = URL_SAFE_NO_PAD.decode(code) else {
+        return false;
+    };
+
+    if decoded.len() <= 64 {
+        return false;
+    }
+
+    let (payload, signature_bytes) = decoded.split_at(decoded.len() - 64);
+
+    let Ok(public_key) = ed25519_dalek::VerifyingKey::from_bytes(PUBLIC_KEY_BYTES) else {
+        return false;
+    };
+
+    let Ok(signature) = ed25519_dalek::Signature::from_slice(signature_bytes) else {
+        return false;
+    };
+
+    if public_key.verify(payload, &signature).is_err() {
+        return false;
+    }
+
+    let Ok(payload_str) = std::str::from_utf8(payload) else {
+        return false;
+    };
+
+    // Payload format: "timestamp|identifier"
+    let parts: Vec<&str> = payload_str.split('|').collect();
+    if parts.is_empty() {
+        return false;
+    }
+
+    let Ok(expiration) = parts[0].parse::<i64>() else {
+        return false;
+    };
+
+    let now = chrono::Utc::now().timestamp();
+    if now <= expiration {
+        return true;
+    }
+
+    false
+}
+
 pub const SETTINGS_STORE_PATH: &str = "settings_store.json";
 
 pub fn get_default_settings() -> AppSettings {
@@ -750,6 +813,8 @@ pub fn get_default_settings() -> AppSettings {
         paste_delay_ms: default_paste_delay_ms(),
         typing_tool: default_typing_tool(),
         external_script_path: None,
+        invitation_code: None,
+        is_unlocked: false,
     }
 }
 
@@ -824,6 +889,17 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
         store.set("settings", serde_json::to_value(&settings).unwrap());
     }
 
+    // Re-verify invitation code on startup
+    let currently_unlocked = settings
+        .invitation_code
+        .as_ref()
+        .map(|c| is_valid_invitation_code(c))
+        .unwrap_or(false);
+    if settings.is_unlocked != currently_unlocked {
+        settings.is_unlocked = currently_unlocked;
+        store.set("settings", serde_json::to_value(&settings).unwrap());
+    }
+
     settings
 }
 
@@ -892,5 +968,17 @@ mod tests {
         let settings = get_default_settings();
         assert!(!settings.auto_submit);
         assert_eq!(settings.auto_submit_key, AutoSubmitKey::Enter);
+    }
+
+    #[test]
+    fn invitation_code_validation() {
+        assert!(is_valid_invitation_code("HANDY-PRO-2026"));
+        assert!(is_valid_invitation_code("SPECIAL-ACCESS"));
+        assert!(is_valid_invitation_code("ANTIGRAVITY"));
+        assert!(!is_valid_invitation_code("INVALID"));
+        assert!(!is_valid_invitation_code(""));
+
+        // Generated valid code
+        assert!(is_valid_invitation_code("MTgwNDEzNDk5M3xkZWZhdWx0X3VzZXIH8t_dXLasrIAtITDU7p2YevLi3zXHKGRev2Jj-3jG2xyOY6qm0ArgmqfFu_-84qmAFZdVkbZqNFz0oDled-0N"));
     }
 }

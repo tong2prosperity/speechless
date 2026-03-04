@@ -320,6 +320,7 @@ pub fn run(cli_args: CliArgs) {
         shortcut::handy_keys::start_handy_keys_recording,
         shortcut::handy_keys::stop_handy_keys_recording,
         trigger_update_check,
+        commands::verify_invitation_code,
         commands::cancel_operation,
         commands::get_app_dir_path,
         commands::get_app_settings,

@@ -181,6 +181,8 @@ export const useSettingsStore = create<SettingsStore>()(
             clamshell_microphone: settings.clamshell_microphone ?? "Default",
             selected_output_device:
               settings.selected_output_device ?? "Default",
+            invitation_code: settings.invitation_code ?? null,
+            is_unlocked: settings.is_unlocked ?? false,
           };
           set({ settings: normalizedSettings, isLoading: false });
         } else {

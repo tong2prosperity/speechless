@@ -47,8 +47,8 @@ const RecordingOverlay: React.FC = () => {
 
         // Apply smoothing to reduce jitter and carefully amplify
         const smoothed = smoothedLevelsRef.current.map((prev, i) => {
-          const target = Math.min(1.0, (newLevels[i] || 0) * 1.5); // Amplify slightly for better UI visibility
-          return prev * 0.5 + target * 0.5; // Make the UI transition slightly snappier
+          const target = Math.min(1.0, (newLevels[i] || 0) * 1.15); // Reduce amplification for more natural volume
+          return prev * 0.65 + target * 0.35; // Increase dampening to prevent jitter
         });
 
         smoothedLevelsRef.current = smoothed;
@@ -104,10 +104,10 @@ const RecordingOverlay: React.FC = () => {
                 key={i}
                 className="bar"
                 style={{
-                  height: `${Math.min(24, 4 + Math.pow(v, 0.6) * 20)}px`, // Increase max height slightly and use stronger curve
+                  height: `${Math.min(20, 4 + Math.pow(v, 1.2) * 16)}px`, // Linearize the exponential curve so small values don't explode
                   transition:
-                    "height 60ms cubic-bezier(0.4, 0, 0.2, 1), opacity 120ms ease-out", // Snappier bezier curve
-                  opacity: Math.max(0.3, 0.3 + v * 1.4), // Minimum opacity for visibility scaled properly
+                    "height 80ms cubic-bezier(0.16, 1, 0.3, 1), opacity 80ms cubic-bezier(0.16, 1, 0.3, 1)",
+                  opacity: Math.max(0.3, 0.3 + v * 0.7), // Smooth opacity too
                 }}
               />
             ))}
