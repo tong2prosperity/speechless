@@ -22,6 +22,8 @@ Press a shortcut, speak, and have your words appear in any text field—**all wi
 
 speechless is a cross-platform desktop application built with Tauri (Rust + React/TypeScript), a fork of the [Handy](https://github.com/cjpais/Handy) project. We are deeply grateful to [cjpais](https://github.com/cjpais) and the original contributors for building such a solid foundation.
 
+**Note**: Speechless is part of **Navi**, an open-source ecosystem of practical voice agent projects. More coming soon!
+
 
 ## ✨ Why speechless?
 
