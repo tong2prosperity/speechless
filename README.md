@@ -24,7 +24,6 @@ speechless is a cross-platform desktop application built with Tauri (Rust + Reac
 
 **Note**: Speechless is part of **Navi**, an open-source ecosystem of practical voice agent projects. More coming soon!
 
-
 ## ✨ Why speechless?
 
 To fill the gap for a truly open source, extensible speech-to-text tool.

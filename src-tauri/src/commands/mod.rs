@@ -17,6 +17,17 @@ pub fn cancel_operation(app: AppHandle) {
 
 #[tauri::command]
 #[specta::specta]
+pub fn verify_invitation_code(app: AppHandle, code: String) -> Result<bool, String> {
+    let is_valid = crate::settings::is_valid_invitation_code(&code);
+    let mut settings = get_settings(&app);
+    settings.invitation_code = Some(code);
+    settings.is_unlocked = is_valid;
+    write_settings(&app, settings);
+    Ok(is_valid)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn get_app_dir_path(app: AppHandle) -> Result<String, String> {
     let app_data_dir = app
         .path()

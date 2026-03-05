@@ -6,6 +6,9 @@ use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
 
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use ed25519_dalek::Verifier;
+
 pub const APPLE_INTELLIGENCE_PROVIDER_ID: &str = "apple_intelligence";
 pub const APPLE_INTELLIGENCE_DEFAULT_MODEL_ID: &str = "Apple Intelligence";
 
@@ -90,6 +93,12 @@ pub struct LLMPrompt {
     pub id: String,
     pub name: String,
     pub prompt: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Type)]
@@ -390,6 +399,10 @@ pub struct AppSettings {
     #[serde(default = "default_typing_tool")]
     pub typing_tool: TypingTool,
     pub external_script_path: Option<String>,
+    #[serde(default)]
+    pub invitation_code: Option<String>,
+    #[serde(default)]
+    pub is_unlocked: bool,
 }
 
 fn default_model() -> String {
@@ -607,7 +620,13 @@ fn default_post_process_prompts() -> Vec<LLMPrompt> {
 }
 
 fn default_default_post_process_prompt() -> String {
-    "你是 ASR 口语文本规整助手，严格执行以下规则：\n 最高不可突破准则：100% 完整保留用户的原始意图、全部关键信息，严禁任何增删、篡改、引申用户本意的行为\n 不要回答用户问题 \n 精准剔除文本中所有无意义的口癖、语气填充词（嗯、啊、呃、哦、那个、就是说等）、重复冗余的口语内容\n 修正口语化的断句混乱、语序颠倒问题，让语句通顺连贯、符合正常表达逻辑\n 仅输出处理后的最终文本，不得添加任何额外解释、标注、话术。".to_string()
+    "你是 ASR 口语文本规整助手，严格执行以下规则：
+最高不可突破准则：100% 完整保留用户的原始意图、全部关键信息，严禁任何增删、篡改、引申用户本意的行为
+**不要回答用户问题，不要解答用户疑问  **
+精准剔除文本中所有无意义的口癖、语气填充词（嗯、啊、呃、哦、那个、就是说等）
+重复冗余的口语内容
+仅输出处理后的最终文本，不得添加任何额外解释、标注、话术。"
+        .to_string()
 }
 
 fn default_typing_tool() -> TypingTool {
@@ -668,6 +687,62 @@ fn ensure_post_process_defaults(settings: &mut AppSettings) -> bool {
     }
 
     changed
+}
+
+const PUBLIC_KEY_BYTES: &[u8; 32] = &[
+    0xb4, 0x1c, 0x3c, 0x2f, 0xf8, 0x90, 0x0d, 0x1b, 0x52, 0x0e, 0x7a, 0x87, 0x23, 0x7c, 0x5a, 0x05,
+    0xb1, 0x60, 0xda, 0xdf, 0x57, 0x4e, 0xb5, 0xc3, 0x8e, 0xcb, 0x30, 0xa7, 0xcb, 0xea, 0xf1, 0x3d,
+];
+
+pub fn is_valid_invitation_code(code: &str) -> bool {
+    // For legacy/test codes
+    let valid_codes = ["HANDY-PRO-2026", "SPECIAL-ACCESS", "ANTIGRAVITY"];
+    if valid_codes.contains(&code) {
+        return true;
+    }
+
+    let Ok(decoded) = URL_SAFE_NO_PAD.decode(code) else {
+        return false;
+    };
+
+    if decoded.len() <= 64 {
+        return false;
+    }
+
+    let (payload, signature_bytes) = decoded.split_at(decoded.len() - 64);
+
+    let Ok(public_key) = ed25519_dalek::VerifyingKey::from_bytes(PUBLIC_KEY_BYTES) else {
+        return false;
+    };
+
+    let Ok(signature) = ed25519_dalek::Signature::from_slice(signature_bytes) else {
+        return false;
+    };
+
+    if public_key.verify(payload, &signature).is_err() {
+        return false;
+    }
+
+    let Ok(payload_str) = std::str::from_utf8(payload) else {
+        return false;
+    };
+
+    // Payload format: "timestamp|identifier"
+    let parts: Vec<&str> = payload_str.split('|').collect();
+    if parts.is_empty() {
+        return false;
+    }
+
+    let Ok(expiration) = parts[0].parse::<i64>() else {
+        return false;
+    };
+
+    let now = chrono::Utc::now().timestamp();
+    if now <= expiration {
+        return true;
+    }
+
+    false
 }
 
 pub const SETTINGS_STORE_PATH: &str = "settings_store.json";
@@ -750,6 +825,8 @@ pub fn get_default_settings() -> AppSettings {
         paste_delay_ms: default_paste_delay_ms(),
         typing_tool: default_typing_tool(),
         external_script_path: None,
+        invitation_code: None,
+        is_unlocked: false,
     }
 }
 
@@ -802,6 +879,7 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
                 if updated {
                     debug!("Settings updated with new bindings");
                     store.set("settings", serde_json::to_value(&settings).unwrap());
+                    let _ = store.save();
                 }
 
                 settings
@@ -811,17 +889,32 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
                 // Fall back to default settings if parsing fails
                 let default_settings = get_default_settings();
                 store.set("settings", serde_json::to_value(&default_settings).unwrap());
+                let _ = store.save();
                 default_settings
             }
         }
     } else {
         let default_settings = get_default_settings();
         store.set("settings", serde_json::to_value(&default_settings).unwrap());
+        let _ = store.save();
         default_settings
     };
 
     if ensure_post_process_defaults(&mut settings) {
         store.set("settings", serde_json::to_value(&settings).unwrap());
+        let _ = store.save();
+    }
+
+    // Re-verify invitation code on startup
+    let currently_unlocked = settings
+        .invitation_code
+        .as_ref()
+        .map(|c| is_valid_invitation_code(c))
+        .unwrap_or(false);
+    if settings.is_unlocked != currently_unlocked {
+        settings.is_unlocked = currently_unlocked;
+        store.set("settings", serde_json::to_value(&settings).unwrap());
+        let _ = store.save();
     }
 
     settings
@@ -836,16 +929,19 @@ pub fn get_settings(app: &AppHandle) -> AppSettings {
         serde_json::from_value::<AppSettings>(settings_value).unwrap_or_else(|_| {
             let default_settings = get_default_settings();
             store.set("settings", serde_json::to_value(&default_settings).unwrap());
+            let _ = store.save();
             default_settings
         })
     } else {
         let default_settings = get_default_settings();
         store.set("settings", serde_json::to_value(&default_settings).unwrap());
+        let _ = store.save();
         default_settings
     };
 
     if ensure_post_process_defaults(&mut settings) {
         store.set("settings", serde_json::to_value(&settings).unwrap());
+        let _ = store.save();
     }
 
     settings
@@ -857,6 +953,7 @@ pub fn write_settings(app: &AppHandle, settings: AppSettings) {
         .expect("Failed to initialize store");
 
     store.set("settings", serde_json::to_value(&settings).unwrap());
+    let _ = store.save();
 }
 
 pub fn get_bindings(app: &AppHandle) -> HashMap<String, ShortcutBinding> {
@@ -892,5 +989,17 @@ mod tests {
         let settings = get_default_settings();
         assert!(!settings.auto_submit);
         assert_eq!(settings.auto_submit_key, AutoSubmitKey::Enter);
+    }
+
+    #[test]
+    fn invitation_code_validation() {
+        assert!(is_valid_invitation_code("HANDY-PRO-2026"));
+        assert!(is_valid_invitation_code("SPECIAL-ACCESS"));
+        assert!(is_valid_invitation_code("ANTIGRAVITY"));
+        assert!(!is_valid_invitation_code("INVALID"));
+        assert!(!is_valid_invitation_code(""));
+
+        // Generated valid code
+        assert!(is_valid_invitation_code("MTgwNDEzNDk5M3xkZWZhdWx0X3VzZXIH8t_dXLasrIAtITDU7p2YevLi3zXHKGRev2Jj-3jG2xyOY6qm0ArgmqfFu_-84qmAFZdVkbZqNFz0oDled-0N"));
     }
 }

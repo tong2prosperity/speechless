@@ -83,7 +83,7 @@
     },
     "permissions": {
       "title": "Vyžadována oprávnění",
-      "description": "Handy potřebuje několik oprávnění pro správné fungování.",
+      "description": "Speechless potřebuje několik oprávnění pro správné fungování.",
       "microphone": {
         "title": "Přístup k mikrofonu",
         "description": "Potřebný pro zachycení vašeho hlasu k přepisu."
@@ -526,7 +526,7 @@
   },
   "accessibility": {
     "permissionsRequired": "Vyžadována oprávnění usnadnění přístupu",
-    "permissionsDescription": "Handy potřebuje oprávnění usnadnění přístupu, aby mohlo psát přepsaný text.",
+    "permissionsDescription": "Speechless potřebuje oprávnění usnadnění přístupu, aby mohlo psát přepsaný text.",
     "openSettings": "Otevřít Nastavení systému",
     "dismiss": "Zavřít"
   },

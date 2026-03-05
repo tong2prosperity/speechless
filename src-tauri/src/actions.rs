@@ -123,9 +123,16 @@ async fn post_process_transcription(
                     content.len(),
                     input_len
                 );
+                // Truncate at a valid UTF-8 char boundary to avoid panicking on multi-byte chars
+                let preview_end = content
+                    .char_indices()
+                    .map(|(i, _)| i)
+                    .take_while(|&i| i <= 200)
+                    .last()
+                    .unwrap_or(content.len());
                 debug!(
                     "[post-process] navi_llm output: {:?}",
-                    &content[..content.len().min(200)]
+                    &content[..preview_end]
                 );
                 Some(content)
             }
@@ -373,6 +380,22 @@ impl ShortcutAction for TranscribeAction {
         let start_time = Instant::now();
         debug!("TranscribeAction::start called for binding: {}", binding_id);
 
+        let settings = get_settings(app);
+
+        // If it's a prompt shortcut, check if it's enabled
+        if binding_id.starts_with("prompt_") {
+            if let Some(prompt) = settings
+                .post_process_prompts
+                .iter()
+                .find(|p| p.id == binding_id)
+            {
+                if !prompt.enabled {
+                    debug!("Prompt shortcut {} is disabled, skipping", binding_id);
+                    return;
+                }
+            }
+        }
+
         // Load model in the background
         let tm = app.state::<Arc<TranscriptionManager>>();
         tm.initiate_model_load();
@@ -430,6 +453,9 @@ impl ShortcutAction for TranscribeAction {
         if recording_started {
             // Dynamically register the cancel shortcut in a separate task to avoid deadlock
             shortcut::register_cancel_shortcut(app);
+        } else {
+            utils::hide_recording_overlay(app);
+            change_tray_icon(app, TrayIconState::Idle);
         }
 
         debug!(
@@ -445,8 +471,16 @@ impl ShortcutAction for TranscribeAction {
         let stop_time = Instant::now();
         debug!("TranscribeAction::stop called for binding: {}", binding_id);
 
-        let ah = app.clone();
         let rm = Arc::clone(&app.state::<Arc<AudioRecordingManager>>());
+
+        if !rm.is_recording() {
+            debug!("Skipping stop because no active recording was found.");
+            utils::hide_recording_overlay(app);
+            change_tray_icon(app, TrayIconState::Idle);
+            return;
+        }
+
+        let ah = app.clone();
         let tm = Arc::clone(&app.state::<Arc<TranscriptionManager>>());
         let hm = Arc::clone(&app.state::<Arc<HistoryManager>>());
 

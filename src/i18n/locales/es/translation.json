@@ -83,7 +83,7 @@
     },
     "permissions": {
       "title": "Permisos Requeridos",
-      "description": "Handy necesita algunos permisos para funcionar correctamente.",
+      "description": "Speechless necesita algunos permisos para funcionar correctamente.",
       "microphone": {
         "title": "Acceso al Micrófono",
         "description": "Necesario para escuchar tu voz para la transcripción."
@@ -526,7 +526,7 @@
   },
   "accessibility": {
     "permissionsRequired": "Se Requieren Permisos de Accesibilidad",
-    "permissionsDescription": "Handy necesita permisos de accesibilidad para escribir texto transcrito.",
+    "permissionsDescription": "Speechless necesita permisos de accesibilidad para escribir texto transcrito.",
     "openSettings": "Abrir Ajustes del Sistema",
     "dismiss": "Descartar"
   },

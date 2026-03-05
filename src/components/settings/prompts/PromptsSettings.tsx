@@ -159,25 +159,44 @@ const PromptsSettingsPromptsComponent: React.FC = () => {
   const [promptDrafts, setPromptDrafts] = useState<
     Record<string, { name: string; prompt: string }>
   >({});
+  const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+
   const [draftName, setDraftName] = useState("");
   const [draftText, setDraftText] = useState("");
   const [draftBinding, setDraftBinding] = useState("");
+
   const [isRecordingCreateBinding, setIsRecordingCreateBinding] =
     useState(false);
   const [createKeyPressed, setCreateKeyPressed] = useState<string[]>([]);
   const [createRecordedKeys, setCreateRecordedKeys] = useState<string[]>([]);
   const osType = useOsType();
 
+  // For editing
+  const [editName, setEditName] = useState("");
+  const [editText, setEditText] = useState("");
+
   useEffect(() => {
-    const nextDrafts = prompts.reduce<
-      Record<string, { name: string; prompt: string }>
-    >((acc, prompt) => {
-      acc[prompt.id] = { name: prompt.name, prompt: prompt.prompt };
-      return acc;
-    }, {});
-    setPromptDrafts(nextDrafts);
-  }, [prompts]);
+    // If we are editing and the prompt still exists, keep it.
+    // Otherwise reset editing state if prompts change out from under us.
+    if (editingPromptId) {
+      const exists = prompts.some((p) => p.id === editingPromptId);
+      if (!exists) {
+        setEditingPromptId(null);
+      }
+    }
+  }, [prompts, editingPromptId]);
+
+  const handleStartEdit = (prompt: {
+    id: string;
+    name: string;
+    prompt: string;
+  }) => {
+    setEditingPromptId(prompt.id);
+    setEditName(prompt.name);
+    setEditText(prompt.prompt);
+    setIsCreating(false);
+  };
 
   const handleCreatePrompt = async () => {
     if (!draftName.trim() || !draftText.trim() || !draftBinding.trim()) return;
@@ -200,17 +219,17 @@ const PromptsSettingsPromptsComponent: React.FC = () => {
     }
   };
 
-  const handleUpdatePrompt = async (promptId: string) => {
-    const draft = promptDrafts[promptId];
-    if (!draft || !draft.name.trim() || !draft.prompt.trim()) return;
+  const handleUpdatePrompt = async () => {
+    if (!editingPromptId || !editName.trim() || !editText.trim()) return;
 
     try {
       await commands.updatePostProcessPrompt(
-        promptId,
-        draft.name.trim(),
-        draft.prompt.trim(),
+        editingPromptId,
+        editName.trim(),
+        editText.trim(),
       );
       await refreshSettings();
+      setEditingPromptId(null);
     } catch (error) {
       console.error("Failed to update prompt:", error);
     }
@@ -227,6 +246,15 @@ const PromptsSettingsPromptsComponent: React.FC = () => {
     }
   };
 
+  const handleTogglePrompt = async (promptId: string, enabled: boolean) => {
+    try {
+      await commands.togglePostProcessPromptEnabled(promptId, enabled);
+      await refreshSettings();
+    } catch (error) {
+      console.error("Failed to toggle prompt:", error);
+    }
+  };
+
   const handleCancelCreate = () => {
     setIsCreating(false);
     setIsRecordingCreateBinding(false);
@@ -239,6 +267,7 @@ const PromptsSettingsPromptsComponent: React.FC = () => {
 
   const handleStartCreate = () => {
     setIsCreating(true);
+    setEditingPromptId(null);
     setDraftName("");
     setDraftText("");
     setDraftBinding("");
@@ -330,7 +359,10 @@ const PromptsSettingsPromptsComponent: React.FC = () => {
     osType,
   ]);
 
-  const hasPrompts = prompts.length > 0;
+  const filteredPrompts = prompts.filter(
+    (p) => p.name !== "Improve Transcriptions",
+  );
+  const hasPrompts = filteredPrompts.length > 0;
 
   return (
     <SettingContainer
@@ -340,187 +372,269 @@ const PromptsSettingsPromptsComponent: React.FC = () => {
       layout="stacked"
       grouped={true}
     >
-      <div className="space-y-3">
+      <div className="space-y-4">
         <Alert variant="info" contained>
           {t("settings.postProcessing.prompts.shortcuts.flowHint")}
         </Alert>
 
-        <div className="flex gap-2">
-          <Button
-            onClick={handleStartCreate}
-            variant="primary"
-            size="md"
-            disabled={isCreating}
-          >
-            {t("settings.postProcessing.prompts.createNew")}
-          </Button>
-        </div>
-
-        {!isCreating && !hasPrompts && (
-          <div className="p-3 bg-mid-gray/5 rounded-md border border-mid-gray/20">
-            <p className="text-sm text-mid-gray">
-              {t("settings.postProcessing.prompts.createFirst")}
-            </p>
+        {!isCreating && !editingPromptId && (
+          <div className="flex justify-between items-center bg-mid-gray/5 p-3 rounded-md border border-mid-gray/20">
+            <h4 className="text-sm font-semibold">
+              {t("settings.postProcessing.prompts.title")}
+            </h4>
+            <Button onClick={handleStartCreate} variant="primary" size="sm">
+              {t("settings.postProcessing.prompts.createNew")}
+            </Button>
           </div>
         )}
 
-        {!isCreating &&
-          prompts.map((prompt) => {
-            const draft = promptDrafts[prompt.id] ?? {
-              name: prompt.name,
-              prompt: prompt.prompt,
-            };
-            const isDirty =
-              draft.name.trim() !== prompt.name.trim() ||
-              draft.prompt.trim() !== prompt.prompt.trim();
-
-            return (
-              <div
-                key={prompt.id}
-                className="space-y-3 rounded-md border border-mid-gray/20 bg-mid-gray/5 p-3"
-              >
-                <div className="space-y-2 flex flex-col">
-                  <label className="text-sm font-semibold">
-                    {t("settings.postProcessing.prompts.promptLabel")}
-                  </label>
-                  <Input
-                    type="text"
-                    value={draft.name}
-                    onChange={(e) =>
-                      setPromptDrafts((prev) => ({
-                        ...prev,
-                        [prompt.id]: {
-                          ...draft,
-                          name: e.target.value,
-                        },
-                      }))
-                    }
-                    placeholder={t(
-                      "settings.postProcessing.prompts.promptLabelPlaceholder",
+        {!isCreating && !editingPromptId && (
+          <div className="space-y-2">
+            {!hasPrompts ? (
+              <div className="p-8 text-center bg-mid-gray/5 rounded-md border border-dashed border-mid-gray/30">
+                <p className="text-sm text-mid-gray">
+                  {t("settings.postProcessing.prompts.createFirst")}
+                </p>
+              </div>
+            ) : (
+              filteredPrompts.map((prompt) => (
+                <div
+                  key={prompt.id}
+                  className="group relative flex items-center justify-between p-3.5 bg-transparent hover:bg-mid-gray/5 rounded-lg border border-mid-gray/20 transition-all overflow-hidden cursor-default"
+                >
+                  <div
+                    className={`flex flex-col gap-1 min-w-0 pr-4 transition-opacity duration-200 ${prompt.enabled !== false ? "opacity-100" : "opacity-50"}`}
+                  >
+                    <span className="text-[14px] font-medium truncate text-foreground">
+                      {prompt.name}
+                    </span>
+                    {getSetting("bindings")?.[prompt.id]?.current_binding && (
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <kbd className="px-1.5 py-0.5 text-[10px] font-mono font-medium tracking-wider text-mid-gray bg-mid-gray/10 rounded border border-mid-gray/20 shadow-sm">
+                          {formatKeyCombination(
+                            getSetting("bindings")![prompt.id]!.current_binding,
+                            osType,
+                          )}
+                        </kbd>
+                      </div>
                     )}
-                    variant="compact"
-                  />
-                </div>
+                  </div>
 
-                <div className="space-y-2 flex flex-col">
-                  <label className="text-sm font-semibold">
-                    {t("settings.postProcessing.prompts.promptInstructions")}
-                  </label>
-                  <Textarea
-                    value={draft.prompt}
-                    onChange={(e) =>
-                      setPromptDrafts((prev) => ({
-                        ...prev,
-                        [prompt.id]: {
-                          ...draft,
-                          prompt: e.target.value,
-                        },
-                      }))
-                    }
-                    placeholder={t(
-                      "settings.postProcessing.prompts.promptInstructionsPlaceholder",
-                    )}
-                  />
-                  <p
-                    className="text-xs text-mid-gray/70"
-                    dangerouslySetInnerHTML={{
-                      __html: t("settings.postProcessing.prompts.promptTip"),
-                    }}
-                  />
-                </div>
+                  <div className="flex items-center gap-4 shrink-0">
+                    <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity mr-1">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="h-7 px-2.5 text-[11px] bg-white hover:bg-mid-gray/5 dark:bg-white/5 dark:hover:bg-white/10 shadow-sm border border-mid-gray/20 font-medium"
+                        onClick={() => handleStartEdit(prompt)}
+                      >
+                        {t("common.edit")}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="h-7 px-2.5 text-[11px] text-red-500 hover:text-red-600 bg-red-50/50 hover:bg-red-50 dark:bg-red-950/30 dark:hover:bg-red-900/40 shadow-sm border border-red-100 dark:border-red-900/50 font-medium"
+                        onClick={() => handleDeletePrompt(prompt.id)}
+                      >
+                        {t("common.delete")}
+                      </Button>
+                    </div>
 
+                    <div className="w-px h-5 bg-mid-gray/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                    <div className="relative inline-flex items-center h-5 w-9 shrink-0 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={prompt.enabled !== false}
+                        onChange={(e) =>
+                          handleTogglePrompt(prompt.id, e.target.checked)
+                        }
+                        className="peer sr-only"
+                        id={`toggle-${prompt.id}`}
+                      />
+                      <label
+                        htmlFor={`toggle-${prompt.id}`}
+                        className={`block h-full w-full rounded-full transition-colors duration-200 cursor-pointer shadow-inner border border-transparent ${
+                          prompt.enabled !== false
+                            ? "bg-black dark:bg-white"
+                            : "bg-mid-gray/30"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-[1px] left-[1px] h-[16px] w-[16px] rounded-full transition-transform duration-200 shadow-[0_1px_2px_rgba(0,0,0,0.15)] ${
+                            prompt.enabled !== false
+                              ? "translate-x-4 bg-white dark:bg-black"
+                              : "translate-x-0 bg-white"
+                          }`}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {editingPromptId && (
+          <div className="space-y-4 p-4 border border-logo-primary/30 rounded-lg bg-logo-primary/5 animate-in fade-in duration-300">
+            <div className="flex justify-between items-center mb-2">
+              <h4 className="font-semibold text-logo-primary">
+                {t("common.edit")} {editName}
+              </h4>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider text-mid-gray">
+                  {t("settings.postProcessing.prompts.promptLabel")}
+                </label>
+                <Input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder={t(
+                    "settings.postProcessing.prompts.promptLabelPlaceholder",
+                  )}
+                  variant="compact"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider text-mid-gray">
+                  {t("settings.postProcessing.prompts.promptInstructions")}
+                </label>
+                <Textarea
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  placeholder={t(
+                    "settings.postProcessing.prompts.promptInstructionsPlaceholder",
+                  )}
+                  rows={6}
+                />
+                <p
+                  className="text-[11px] text-mid-gray/70 italic"
+                  dangerouslySetInnerHTML={{
+                    __html: t("settings.postProcessing.prompts.promptTip"),
+                  }}
+                />
+              </div>
+
+              <div className="space-y-1.5 pt-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-mid-gray">
+                  {t("settings.postProcessing.hotkey.title")}
+                </label>
                 <ShortcutInput
-                  shortcutId={prompt.id}
+                  shortcutId={editingPromptId}
                   descriptionMode="tooltip"
                   grouped={false}
                 />
-
-                <div className="flex gap-2 pt-1">
-                  <Button
-                    onClick={() => handleUpdatePrompt(prompt.id)}
-                    variant="primary"
-                    size="md"
-                    disabled={
-                      !draft.name.trim() || !draft.prompt.trim() || !isDirty
-                    }
-                  >
-                    {t("settings.postProcessing.prompts.updatePrompt")}
-                  </Button>
-                  <Button
-                    onClick={() => handleDeletePrompt(prompt.id)}
-                    variant="secondary"
-                    size="md"
-                    disabled={prompts.length <= 1}
-                  >
-                    {t("settings.postProcessing.prompts.deletePrompt")}
-                  </Button>
-                </div>
               </div>
-            );
-          })}
+            </div>
+
+            <div className="flex gap-2 pt-4 border-t border-mid-gray/10">
+              <Button
+                onClick={handleUpdatePrompt}
+                variant="primary"
+                size="md"
+                disabled={!editName.trim() || !editText.trim()}
+              >
+                {t("common.save")}
+              </Button>
+              <Button
+                onClick={() => setEditingPromptId(null)}
+                variant="secondary"
+                size="md"
+              >
+                {t("common.cancel")}
+              </Button>
+            </div>
+          </div>
+        )}
 
         {isCreating && (
-          <div className="space-y-3">
-            <div className="space-y-2 flex flex-col">
-              <label className="text-sm font-semibold text-text">
-                {t("settings.postProcessing.prompts.promptLabel")}
-              </label>
-              <Input
-                type="text"
-                value={draftName}
-                onChange={(e) => setDraftName(e.target.value)}
-                placeholder={t(
-                  "settings.postProcessing.prompts.promptLabelPlaceholder",
-                )}
-                variant="compact"
-              />
-            </div>
+          <div className="space-y-4 p-4 border border-logo-primary/30 rounded-lg bg-logo-primary/5 animate-in slide-in-from-top-4 duration-300">
+            <h4 className="font-semibold text-logo-primary">
+              {t("settings.postProcessing.prompts.createNew")}
+            </h4>
 
-            <div className="space-y-2 flex flex-col">
-              <label className="text-sm font-semibold">
-                {t("settings.postProcessing.prompts.promptInstructions")}
-              </label>
-              <Textarea
-                value={draftText}
-                onChange={(e) => setDraftText(e.target.value)}
-                placeholder={t(
-                  "settings.postProcessing.prompts.promptInstructionsPlaceholder",
-                )}
-              />
-              <p
-                className="text-xs text-mid-gray/70"
-                dangerouslySetInnerHTML={{
-                  __html: t("settings.postProcessing.prompts.promptTip"),
-                }}
-              />
-            </div>
-
-            <div className="space-y-2 flex flex-col">
-              <label className="text-sm font-semibold">
-                {t("settings.postProcessing.hotkey.title")}
-              </label>
-              <div
-                className="px-2 py-2 text-sm font-semibold bg-mid-gray/10 border border-mid-gray/80 hover:bg-logo-primary/10 rounded-md cursor-pointer hover:border-logo-primary"
-                onClick={() => {
-                  setIsRecordingCreateBinding(true);
-                  setCreateKeyPressed([]);
-                  setCreateRecordedKeys([]);
-                }}
-              >
-                {isRecordingCreateBinding
-                  ? createRecordedKeys.length > 0
-                    ? formatKeyCombination(createRecordedKeys.join("+"), osType)
-                    : t("settings.general.shortcut.pressKeys")
-                  : draftBinding
-                    ? formatKeyCombination(draftBinding, osType)
-                    : t("settings.general.shortcut.pressKeys")}
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider text-mid-gray">
+                  {t("settings.postProcessing.prompts.promptLabel")}
+                </label>
+                <Input
+                  type="text"
+                  value={draftName}
+                  onChange={(e) => setDraftName(e.target.value)}
+                  placeholder={t(
+                    "settings.postProcessing.prompts.promptLabelPlaceholder",
+                  )}
+                  variant="compact"
+                />
               </div>
-              <p className="text-xs text-mid-gray/70">
-                {t("settings.postProcessing.prompts.createHotkeyHint")}
-              </p>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider text-mid-gray">
+                  {t("settings.postProcessing.prompts.promptInstructions")}
+                </label>
+                <Textarea
+                  value={draftText}
+                  onChange={(e) => setDraftText(e.target.value)}
+                  placeholder={t(
+                    "settings.postProcessing.prompts.promptInstructionsPlaceholder",
+                  )}
+                  rows={6}
+                />
+                <p
+                  className="text-[11px] text-mid-gray/70 italic"
+                  dangerouslySetInnerHTML={{
+                    __html: t("settings.postProcessing.prompts.promptTip"),
+                  }}
+                />
+              </div>
+
+              <div className="space-y-1.5 pt-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-mid-gray">
+                  {t("settings.postProcessing.hotkey.title")}
+                </label>
+                <div
+                  className="px-3 py-2 text-sm font-semibold bg-white border border-mid-gray/20 hover:border-logo-primary/50 cursor-pointer rounded-md transition-all shadow-sm flex items-center justify-between"
+                  onClick={() => {
+                    setIsRecordingCreateBinding(true);
+                    setCreateKeyPressed([]);
+                    setCreateRecordedKeys([]);
+                  }}
+                >
+                  <span
+                    className={
+                      !draftBinding && !isRecordingCreateBinding
+                        ? "text-mid-gray/50 font-normal"
+                        : ""
+                    }
+                  >
+                    {isRecordingCreateBinding
+                      ? createRecordedKeys.length > 0
+                        ? formatKeyCombination(
+                            createRecordedKeys.join("+"),
+                            osType,
+                          )
+                        : t("settings.general.shortcut.pressKeys")
+                      : draftBinding
+                        ? formatKeyCombination(draftBinding, osType)
+                        : t("settings.general.shortcut.pressKeys")}
+                  </span>
+                  {isRecordingCreateBinding && (
+                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  )}
+                </div>
+                <p className="text-[11px] text-mid-gray/60 italic">
+                  {t("settings.postProcessing.prompts.createHotkeyHint")}
+                </p>
+              </div>
             </div>
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex gap-2 pt-4 border-t border-mid-gray/10">
               <Button
                 onClick={handleCreatePrompt}
                 variant="primary"
@@ -529,14 +643,14 @@ const PromptsSettingsPromptsComponent: React.FC = () => {
                   !draftName.trim() || !draftText.trim() || !draftBinding.trim()
                 }
               >
-                {t("settings.postProcessing.prompts.createPrompt")}
+                {t("common.create")}
               </Button>
               <Button
                 onClick={handleCancelCreate}
                 variant="secondary"
                 size="md"
               >
-                {t("settings.postProcessing.prompts.cancel")}
+                {t("common.cancel")}
               </Button>
             </div>
           </div>
