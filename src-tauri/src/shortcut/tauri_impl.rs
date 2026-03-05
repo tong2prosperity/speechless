@@ -35,6 +35,21 @@ pub fn init_shortcuts(app: &AppHandle) {
             error!("Failed to register shortcut {} during init: {}", id, e);
         }
     }
+
+    // Register active prompt shortcuts
+    for prompt in &user_settings.post_process_prompts {
+        if !prompt.enabled {
+            continue;
+        }
+        if let Some(binding) = user_settings.bindings.get(&prompt.id) {
+            if let Err(e) = register_shortcut(app, binding.clone()) {
+                error!(
+                    "Failed to register prompt shortcut {} during init: {}",
+                    prompt.id, e
+                );
+            }
+        }
+    }
 }
 
 /// Validate a shortcut string for the Tauri global-shortcut implementation.

@@ -40,7 +40,7 @@ export const HistoryLimit: React.FC<HistoryLimitProps> = ({
           max="1000"
           value={historyLimit}
           onChange={handleChange}
-          disabled={isUpdating("history_limit")}
+          disabled={false}
           className="w-20"
         />
         <span className="text-sm text-text">

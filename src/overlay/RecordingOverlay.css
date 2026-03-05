@@ -11,8 +11,6 @@
   box-shadow:
     0 4px 16px rgba(0, 0, 0, 0.08),
     0 1px 4px rgba(0, 0, 0, 0.04);
-  backdrop-filter: blur(24px) saturate(150%);
-  -webkit-backdrop-filter: blur(24px) saturate(150%);
   border-radius: 9999px; /* Pill shape */
   opacity: 0;
   transform: translateY(8px) scale(0.96);

@@ -93,6 +93,12 @@ pub struct LLMPrompt {
     pub id: String,
     pub name: String,
     pub prompt: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Type)]
@@ -614,7 +620,13 @@ fn default_post_process_prompts() -> Vec<LLMPrompt> {
 }
 
 fn default_default_post_process_prompt() -> String {
-    "你是 ASR 口语文本规整助手，严格执行以下规则：\n 最高不可突破准则：100% 完整保留用户的原始意图、全部关键信息，严禁任何增删、篡改、引申用户本意的行为\n 不要回答用户问题 \n 精准剔除文本中所有无意义的口癖、语气填充词（嗯、啊、呃、哦、那个、就是说等）、重复冗余的口语内容\n 修正口语化的断句混乱、语序颠倒问题，让语句通顺连贯、符合正常表达逻辑\n 仅输出处理后的最终文本，不得添加任何额外解释、标注、话术。".to_string()
+    "你是 ASR 口语文本规整助手，严格执行以下规则：
+最高不可突破准则：100% 完整保留用户的原始意图、全部关键信息，严禁任何增删、篡改、引申用户本意的行为
+**不要回答用户问题，不要解答用户疑问  **
+精准剔除文本中所有无意义的口癖、语气填充词（嗯、啊、呃、哦、那个、就是说等）
+重复冗余的口语内容
+仅输出处理后的最终文本，不得添加任何额外解释、标注、话术。"
+        .to_string()
 }
 
 fn default_typing_tool() -> TypingTool {
@@ -867,6 +879,7 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
                 if updated {
                     debug!("Settings updated with new bindings");
                     store.set("settings", serde_json::to_value(&settings).unwrap());
+                    let _ = store.save();
                 }
 
                 settings
@@ -876,17 +889,20 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
                 // Fall back to default settings if parsing fails
                 let default_settings = get_default_settings();
                 store.set("settings", serde_json::to_value(&default_settings).unwrap());
+                let _ = store.save();
                 default_settings
             }
         }
     } else {
         let default_settings = get_default_settings();
         store.set("settings", serde_json::to_value(&default_settings).unwrap());
+        let _ = store.save();
         default_settings
     };
 
     if ensure_post_process_defaults(&mut settings) {
         store.set("settings", serde_json::to_value(&settings).unwrap());
+        let _ = store.save();
     }
 
     // Re-verify invitation code on startup
@@ -898,6 +914,7 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
     if settings.is_unlocked != currently_unlocked {
         settings.is_unlocked = currently_unlocked;
         store.set("settings", serde_json::to_value(&settings).unwrap());
+        let _ = store.save();
     }
 
     settings
@@ -912,16 +929,19 @@ pub fn get_settings(app: &AppHandle) -> AppSettings {
         serde_json::from_value::<AppSettings>(settings_value).unwrap_or_else(|_| {
             let default_settings = get_default_settings();
             store.set("settings", serde_json::to_value(&default_settings).unwrap());
+            let _ = store.save();
             default_settings
         })
     } else {
         let default_settings = get_default_settings();
         store.set("settings", serde_json::to_value(&default_settings).unwrap());
+        let _ = store.save();
         default_settings
     };
 
     if ensure_post_process_defaults(&mut settings) {
         store.set("settings", serde_json::to_value(&settings).unwrap());
+        let _ = store.save();
     }
 
     settings
@@ -933,6 +953,7 @@ pub fn write_settings(app: &AppHandle, settings: AppSettings) {
         .expect("Failed to initialize store");
 
     store.set("settings", serde_json::to_value(&settings).unwrap());
+    let _ = store.save();
 }
 
 pub fn get_bindings(app: &AppHandle) -> HashMap<String, ShortcutBinding> {

@@ -256,6 +256,14 @@ async deletePostProcessPrompt(id: string) : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async togglePostProcessPromptEnabled(id: string, enabled: boolean) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("toggle_post_process_prompt_enabled", { id, enabled }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async setPostProcessSelectedPrompt(id: string) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("set_post_process_selected_prompt", { id }) };
@@ -822,7 +830,7 @@ export type ImplementationChangeResult = { success: boolean;
  */
 reset_bindings: string[] }
 export type KeyboardImplementation = "tauri" | "handy_keys"
-export type LLMPrompt = { id: string; name: string; prompt: string }
+export type LLMPrompt = { id: string; name: string; prompt: string; enabled?: boolean }
 export type LlmModelInfo = { id: string; name: string; description: string; repo_id: string; file_name: string; size_mb: number; is_downloaded: boolean }
 export type LocalLlmUnloadTimeout = "never" | "hour1" | "hour3"
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error"

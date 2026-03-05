@@ -102,6 +102,19 @@ pub struct BindingResponse {
     error: Option<String>,
 }
 
+fn is_binding_enabled(app: &AppHandle, id: &str) -> bool {
+    let settings = settings::get_settings(app);
+    if id == "transcribe_with_post_process" {
+        return settings.post_process_enabled;
+    }
+    if id.starts_with("prompt_") {
+        if let Some(prompt) = settings.post_process_prompts.iter().find(|p| p.id == id) {
+            return prompt.enabled;
+        }
+    }
+    true
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn change_binding(
@@ -158,10 +171,12 @@ pub fn change_binding(
         }
     }
 
-    // Unregister the existing binding
-    if let Err(e) = unregister_shortcut(&app, binding_to_modify.clone()) {
-        let error_msg = format!("Failed to unregister shortcut: {}", e);
-        error!("change_binding error: {}", error_msg);
+    // Unregister the existing binding if it was actually registered (enabled)
+    if is_binding_enabled(&app, &id) {
+        if let Err(e) = unregister_shortcut(&app, binding_to_modify.clone()) {
+            let error_msg = format!("Failed to unregister shortcut: {}", e);
+            error!("change_binding error: {}", error_msg);
+        }
     }
 
     // Validate the new shortcut for the current keyboard implementation
@@ -175,15 +190,17 @@ pub fn change_binding(
     let mut updated_binding = binding_to_modify;
     updated_binding.current_binding = binding;
 
-    // Register the new binding
-    if let Err(e) = register_shortcut(&app, updated_binding.clone()) {
-        let error_msg = format!("Failed to register shortcut: {}", e);
-        error!("change_binding error: {}", error_msg);
-        return Ok(BindingResponse {
-            success: false,
-            binding: None,
-            error: Some(error_msg),
-        });
+    // Register the new binding if it should be active
+    if is_binding_enabled(&app, &id) {
+        if let Err(e) = register_shortcut(&app, updated_binding.clone()) {
+            let error_msg = format!("Failed to register shortcut: {}", e);
+            error!("change_binding error: {}", error_msg);
+            return Ok(BindingResponse {
+                success: false,
+                binding: None,
+                error: Some(error_msg),
+            });
+        }
     }
 
     // Update the binding in the settings
@@ -212,10 +229,12 @@ pub fn reset_binding(app: AppHandle, id: String) -> Result<BindingResponse, Stri
 #[tauri::command]
 #[specta::specta]
 pub fn suspend_binding(app: AppHandle, id: String) -> Result<(), String> {
-    if let Some(b) = settings::get_bindings(&app).get(&id).cloned() {
-        if let Err(e) = unregister_shortcut(&app, b) {
-            error!("suspend_binding error for id '{}': {}", id, e);
-            return Err(e);
+    if is_binding_enabled(&app, &id) {
+        if let Some(b) = settings::get_bindings(&app).get(&id).cloned() {
+            if let Err(e) = unregister_shortcut(&app, b) {
+                error!("suspend_binding error for id '{}': {}", id, e);
+                return Err(e);
+            }
         }
     }
     Ok(())
@@ -225,10 +244,12 @@ pub fn suspend_binding(app: AppHandle, id: String) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 pub fn resume_binding(app: AppHandle, id: String) -> Result<(), String> {
-    if let Some(b) = settings::get_bindings(&app).get(&id).cloned() {
-        if let Err(e) = register_shortcut(&app, b) {
-            error!("resume_binding error for id '{}': {}", id, e);
-            return Err(e);
+    if is_binding_enabled(&app, &id) {
+        if let Some(b) = settings::get_bindings(&app).get(&id).cloned() {
+            if let Err(e) = register_shortcut(&app, b) {
+                error!("resume_binding error for id '{}': {}", id, e);
+                return Err(e);
+            }
         }
     }
     Ok(())
@@ -775,6 +796,28 @@ pub fn change_post_process_enabled_setting(app: AppHandle, enabled: bool) -> Res
     settings.post_process_enabled = enabled;
     settings::write_settings(&app, settings.clone());
 
+    if let Some(binding) = settings
+        .bindings
+        .get("transcribe_with_post_process")
+        .cloned()
+    {
+        if enabled {
+            if let Err(e) = register_shortcut(&app, binding) {
+                log::warn!(
+                    "Failed to register transcribe_with_post_process shortcut: {}",
+                    e
+                );
+            }
+        } else {
+            if let Err(e) = unregister_shortcut(&app, binding) {
+                log::warn!(
+                    "Failed to unregister transcribe_with_post_process shortcut: {}",
+                    e
+                );
+            }
+        }
+    }
+
     let llm_manager = app.state::<Arc<crate::managers::llm_manager::LlmManager>>();
     if enabled {
         info!("Post-processing enabled, warming up local LLM if provider is navi_llm");
@@ -935,6 +978,7 @@ pub fn add_post_process_prompt(
         id: id.clone(),
         name: name.clone(),
         prompt,
+        enabled: true,
     };
 
     settings.post_process_prompts.push(new_prompt.clone());
@@ -982,6 +1026,7 @@ pub fn add_post_process_prompt_with_binding(
         id: id.clone(),
         name: name.trim().to_string(),
         prompt: prompt.trim().to_string(),
+        enabled: true,
     };
 
     let prompt_binding = ShortcutBinding {
@@ -1082,6 +1127,44 @@ pub fn delete_post_process_prompt(app: AppHandle, id: String) -> Result<(), Stri
 
     settings::write_settings(&app, settings);
     Ok(())
+}
+#[tauri::command]
+#[specta::specta]
+pub fn toggle_post_process_prompt_enabled(
+    app: AppHandle,
+    id: String,
+    enabled: bool,
+) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    if let Some(prompt) = settings
+        .post_process_prompts
+        .iter_mut()
+        .find(|p| p.id == id)
+    {
+        prompt.enabled = enabled;
+        settings::write_settings(&app, settings.clone());
+
+        // Register or unregister the actual global shortcut
+        if let Some(binding) = settings.bindings.get(&id).cloned() {
+            if enabled {
+                if let Err(e) = register_shortcut(&app, binding) {
+                    log::warn!("Failed to register enabled prompt shortcut {}: {}", id, e);
+                }
+            } else {
+                if let Err(e) = unregister_shortcut(&app, binding) {
+                    log::warn!(
+                        "Failed to unregister disabled prompt shortcut {}: {}",
+                        id,
+                        e
+                    );
+                }
+            }
+        }
+
+        Ok(())
+    } else {
+        Err(format!("Prompt with id '{}' not found", id))
+    }
 }
 
 #[tauri::command]

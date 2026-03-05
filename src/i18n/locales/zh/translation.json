@@ -158,7 +158,7 @@
       "description": "管理核心应用行为和音频硬件偏好设置。",
       "title": "通用",
       "shortcut": {
-        "title": "Handy 快捷键",
+        "title": "快捷键",
         "description": "配置启动语音转文字录制的键盘快捷键",
         "loading": "加载快捷键中...",
         "none": "未配置快捷键",

@@ -70,7 +70,7 @@ export const CustomWords: React.FC<CustomWordsProps> = React.memo(
               onKeyDown={handleKeyPress}
               placeholder={t("settings.advanced.customWords.placeholder")}
               variant="compact"
-              disabled={isUpdating("custom_words")}
+              disabled={false}
             />
             <Button
               onClick={handleAddWord}
@@ -95,7 +95,7 @@ export const CustomWords: React.FC<CustomWordsProps> = React.memo(
               <Button
                 key={word}
                 onClick={() => handleRemoveWord(word)}
-                disabled={isUpdating("custom_words")}
+                disabled={false}
                 variant="secondary"
                 size="sm"
                 className="inline-flex items-center gap-1 cursor-pointer"

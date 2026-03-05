@@ -56,7 +56,6 @@ export const GeneralSettings: React.FC = () => {
                   onChange={(e) =>
                     updateSetting("default_post_process_prompt", e.target.value)
                   }
-                  disabled={isUpdating("default_post_process_prompt")}
                   placeholder={t(
                     "settings.general.postProcessingToggle.defaultPrompt.placeholder",
                   )}
