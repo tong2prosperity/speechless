@@ -16,6 +16,7 @@ use tauri::{AppHandle, Emitter, Manager};
 pub enum EngineType {
     ParakeetSherpa,
     SenseVoiceSherpa,
+    FunASRNanoSherpa,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -203,6 +204,44 @@ impl ModelManager {
                     "sense_voice/model.int8.onnx".to_string(),
                     "sense_voice/tokens.txt".to_string(),
                     "sense_voice/silero_v6.onnx".to_string(),
+                ]),
+            },
+        );
+
+        // FunASR-nano supported languages
+        let funasr_nano_languages: Vec<String> =
+            vec!["zh", "en", "ja", "yue", "ko", "fr", "de", "es", "ru", "ar"]
+                .into_iter()
+                .map(String::from)
+                .collect();
+        available_models.insert(
+            "funasr-nano-int8".to_string(),
+            ModelInfo {
+                id: "funasr-nano-int8".to_string(),
+                name: "FunASR Nano".to_string(),
+                description: "Multilingual. Based on Qwen3-0.6B LLM.".to_string(),
+                filename: "fun-asr".to_string(),
+                url: None,
+                size_mb: 993,
+                is_downloaded: false,
+                is_downloading: false,
+                partial_size: 0,
+                is_directory: true,
+                engine_type: EngineType::FunASRNanoSherpa,
+                accuracy_score: 0.90,
+                speed_score: 0.70,
+                supports_translation: false,
+                is_recommended: false,
+                supported_languages: funasr_nano_languages,
+                is_custom: false,
+                model_scope_repo: Some(ASR_COLLECTION_REPO_ID.to_string()),
+                model_scope_files: Some(vec![
+                    "fun-asr/encoder_adaptor.int8.onnx".to_string(),
+                    "fun-asr/llm.int8.onnx".to_string(),
+                    "fun-asr/embedding.int8.onnx".to_string(),
+                    "fun-asr/tokenizer.json".to_string(),
+                    "fun-asr/vocab.json".to_string(),
+                    "fun-asr/merges.txt".to_string(),
                 ]),
             },
         );

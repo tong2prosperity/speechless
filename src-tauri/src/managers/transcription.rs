@@ -1,10 +1,22 @@
 use crate::audio_toolkit::{apply_custom_words, filter_transcription_output};
+use crate::managers::funasr_nano_sherpa::FunASRNanoSherpaASR;
 use crate::managers::model::{EngineType, ModelManager};
 use crate::managers::parakeet_sherpa::ParakeetSherpaASR;
 use crate::managers::sense_voice_sherpa::SenseVoiceSherpaASR;
 use crate::settings::{get_settings, ModelUnloadTimeout};
 use anyhow::Result;
 use log::{debug, error, info, warn};
+
+/// Returns the preferred inference provider for the current platform.
+fn get_preferred_provider() -> String {
+    if cfg!(target_os = "macos") {
+        "coreml".to_string()
+    } else if cfg!(target_os = "windows") {
+        "directml".to_string()
+    } else {
+        "cpu".to_string()
+    }
+}
 use serde::Serialize;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -24,6 +36,7 @@ pub struct ModelStateEvent {
 enum LoadedEngine {
     ParakeetSherpa(ParakeetSherpaASR),
     SenseVoiceSherpa(SenseVoiceSherpaASR),
+    FunASRNanoSherpa(FunASRNanoSherpaASR),
 }
 
 #[derive(Clone)]
@@ -144,6 +157,7 @@ impl TranscriptionManager {
                 match loaded_engine {
                     LoadedEngine::ParakeetSherpa(ref mut e) => e.unload_model(),
                     LoadedEngine::SenseVoiceSherpa(ref mut e) => e.unload_model(),
+                    LoadedEngine::FunASRNanoSherpa(ref mut e) => e.unload_model(),
                 }
             }
             *engine = None; // Drop the engine to free memory
@@ -246,62 +260,95 @@ impl TranscriptionManager {
 
         let model_path = self.model_manager.get_model_path(model_id)?;
 
-        // Create appropriate engine based on model type
-        let loaded_engine = match model_info.engine_type {
-            EngineType::SenseVoiceSherpa => {
-                let model_file = model_path
-                    .join("model.int8.onnx")
-                    .to_string_lossy()
-                    .to_string();
-                let tokens_file = model_path.join("tokens.txt").to_string_lossy().to_string();
+        // Create appropriate engine based on model type, with fallback to CPU
+        let preferred_provider = get_preferred_provider();
+        let num_threads = Some(4);
 
-                let engine = SenseVoiceSherpaASR::new(
-                    &model_file,
-                    &tokens_file,
-                    Some("coreml".into()),
-                    Some(4),
-                )
-                .map_err(|e| {
-                    let error_msg =
-                        format!("Failed to load SenseVoice Sherpa model {}: {}", model_id, e);
-                    let _ = self.app_handle.emit(
-                        "model-state-changed",
-                        ModelStateEvent {
-                            event_type: "loading_failed".to_string(),
-                            model_id: Some(model_id.to_string()),
-                            model_name: Some(model_info.name.clone()),
-                            error: Some(error_msg.clone()),
-                        },
-                    );
-                    anyhow::anyhow!(error_msg)
-                })?;
-                LoadedEngine::SenseVoiceSherpa(engine)
+        let try_create_engine =
+            |provider: &str| -> std::result::Result<LoadedEngine, anyhow::Error> {
+                let prov = Some(provider.to_string());
+                match model_info.engine_type {
+                    EngineType::SenseVoiceSherpa => {
+                        let model_file = model_path
+                            .join("model.int8.onnx")
+                            .to_string_lossy()
+                            .to_string();
+                        let tokens_file =
+                            model_path.join("tokens.txt").to_string_lossy().to_string();
+                        let engine =
+                            SenseVoiceSherpaASR::new(&model_file, &tokens_file, prov, num_threads)?;
+                        Ok(LoadedEngine::SenseVoiceSherpa(engine))
+                    }
+                    EngineType::ParakeetSherpa => {
+                        let encoder_file = model_path
+                            .join("encoder.int8.onnx")
+                            .to_string_lossy()
+                            .to_string();
+                        let decoder_file = model_path
+                            .join("decoder.int8.onnx")
+                            .to_string_lossy()
+                            .to_string();
+                        let joiner_file = model_path
+                            .join("joiner.int8.onnx")
+                            .to_string_lossy()
+                            .to_string();
+                        let tokens_file =
+                            model_path.join("tokens.txt").to_string_lossy().to_string();
+                        let engine = ParakeetSherpaASR::new(
+                            &encoder_file,
+                            &decoder_file,
+                            &joiner_file,
+                            &tokens_file,
+                            prov,
+                            num_threads,
+                        )?;
+                        Ok(LoadedEngine::ParakeetSherpa(engine))
+                    }
+                    EngineType::FunASRNanoSherpa => {
+                        let encoder_adaptor = model_path
+                            .join("encoder_adaptor.int8.onnx")
+                            .to_string_lossy()
+                            .to_string();
+                        let llm = model_path
+                            .join("llm.int8.onnx")
+                            .to_string_lossy()
+                            .to_string();
+                        let embedding = model_path
+                            .join("embedding.int8.onnx")
+                            .to_string_lossy()
+                            .to_string();
+                        let tokenizer = model_path.to_string_lossy().to_string();
+                        let engine = FunASRNanoSherpaASR::new(
+                            &encoder_adaptor,
+                            &llm,
+                            &embedding,
+                            &tokenizer,
+                            prov,
+                            num_threads,
+                        )?;
+                        Ok(LoadedEngine::FunASRNanoSherpa(engine))
+                    }
+                }
+            };
+
+        let loaded_engine = match try_create_engine(&preferred_provider) {
+            Ok(engine) => {
+                info!(
+                    "Loaded model {} with provider '{}'",
+                    model_id, preferred_provider
+                );
+                engine
             }
-            EngineType::ParakeetSherpa => {
-                let encoder_file = model_path
-                    .join("encoder.int8.onnx")
-                    .to_string_lossy()
-                    .to_string();
-                let decoder_file = model_path
-                    .join("decoder.int8.onnx")
-                    .to_string_lossy()
-                    .to_string();
-                let joiner_file = model_path
-                    .join("joiner.int8.onnx")
-                    .to_string_lossy()
-                    .to_string();
-                let tokens_file = model_path.join("tokens.txt").to_string_lossy().to_string();
-
-                let engine = ParakeetSherpaASR::new(
-                    &encoder_file,
-                    &decoder_file,
-                    &joiner_file,
-                    &tokens_file,
-                    Some(4),
-                )
-                .map_err(|e| {
-                    let error_msg =
-                        format!("Failed to load Parakeet Sherpa model {}: {}", model_id, e);
+            Err(e) if preferred_provider != "cpu" => {
+                warn!(
+                    "Failed to load model {} with provider '{}': {}. Falling back to CPU.",
+                    model_id, preferred_provider, e
+                );
+                try_create_engine("cpu").map_err(|cpu_err| {
+                    let error_msg = format!(
+                        "Failed to load model {} with both '{}' and 'cpu': {}",
+                        model_id, preferred_provider, cpu_err
+                    );
                     let _ = self.app_handle.emit(
                         "model-state-changed",
                         ModelStateEvent {
@@ -312,8 +359,20 @@ impl TranscriptionManager {
                         },
                     );
                     anyhow::anyhow!(error_msg)
-                })?;
-                LoadedEngine::ParakeetSherpa(engine)
+                })?
+            }
+            Err(e) => {
+                let error_msg = format!("Failed to load model {} with CPU: {}", model_id, e);
+                let _ = self.app_handle.emit(
+                    "model-state-changed",
+                    ModelStateEvent {
+                        event_type: "loading_failed".to_string(),
+                        model_id: Some(model_id.to_string()),
+                        model_name: Some(model_info.name.clone()),
+                        error: Some(error_msg.clone()),
+                    },
+                );
+                return Err(anyhow::anyhow!(error_msg));
             }
         };
 
@@ -435,6 +494,11 @@ impl TranscriptionManager {
                     LoadedEngine::ParakeetSherpa(sherpa_engine) => {
                         sherpa_engine.transcribe(16000, &audio).map_err(|e| {
                             anyhow::anyhow!("Parakeet Sherpa transcription failed: {}", e)
+                        })
+                    }
+                    LoadedEngine::FunASRNanoSherpa(sherpa_engine) => {
+                        sherpa_engine.transcribe(16000, &audio).map_err(|e| {
+                            anyhow::anyhow!("FunASR-nano transcription failed: {}", e)
                         })
                     }
                 }

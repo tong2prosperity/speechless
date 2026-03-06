@@ -12,14 +12,16 @@ impl ParakeetSherpaASR {
         decoder: &str,
         joiner: &str,
         tokens: &str,
+        provider: Option<String>,
         num_threads: Option<i32>,
     ) -> Result<Self> {
         log::info!(
-            "ParakeetSherpaASR: initializing with encoder={}, decoder={}, joiner={}, tokens={}, num_threads={:?}",
+            "ParakeetSherpaASR: initializing with encoder={}, decoder={}, joiner={}, tokens={}, provider={:?}, num_threads={:?}",
             encoder,
             decoder,
             joiner,
             tokens,
+            provider,
             num_threads
         );
 
@@ -28,6 +30,7 @@ impl ParakeetSherpaASR {
             decoder: decoder.to_string(),
             joiner: joiner.to_string(),
             tokens: tokens.to_string(),
+            provider,
             num_threads: num_threads.unwrap_or(1),
             sample_rate: 16_000,
             feature_dim: 80,

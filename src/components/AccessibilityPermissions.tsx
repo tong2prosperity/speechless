@@ -5,6 +5,7 @@ import {
   checkAccessibilityPermission,
   requestAccessibilityPermission,
 } from "tauri-plugin-macos-permissions-api";
+import { commands } from "@/bindings";
 
 // Define permission state type
 type PermissionState = "request" | "verify" | "granted";
@@ -29,6 +30,15 @@ const AccessibilityPermissions: React.FC = () => {
     const hasPermissions: boolean = await checkAccessibilityPermission();
     setHasAccessibility(hasPermissions);
     setPermissionState(hasPermissions ? "granted" : "verify");
+    if (hasPermissions) {
+      // Initialize Enigo and shortcuts now that accessibility is granted
+      Promise.all([
+        commands.initializeEnigo(),
+        commands.initializeShortcuts(),
+      ]).catch((e) => {
+        console.warn("Failed to initialize after permission grant:", e);
+      });
+    }
     return hasPermissions;
   };
 

@@ -1,4 +1,5 @@
 pub mod audio;
+pub mod funasr_nano_sherpa;
 pub mod history;
 pub mod llm_manager;
 pub mod model;

@@ -121,13 +121,6 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
 
           if (accessibilityGranted && prev.accessibility !== "granted") {
             newState.accessibility = "granted";
-            // Initialize Enigo and shortcuts when accessibility is granted
-            Promise.all([
-              commands.initializeEnigo(),
-              commands.initializeShortcuts(),
-            ]).catch((e) => {
-              console.warn("Failed to initialize after permission grant:", e);
-            });
           }
 
           if (microphoneGranted && prev.microphone !== "granted") {
@@ -136,6 +129,16 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
 
           return newState;
         });
+
+        // Initialize Enigo and shortcuts when accessibility is newly granted
+        if (accessibilityGranted) {
+          Promise.all([
+            commands.initializeEnigo(),
+            commands.initializeShortcuts(),
+          ]).catch((e) => {
+            console.warn("Failed to initialize after permission grant:", e);
+          });
+        }
 
         // If both granted, stop polling, refresh audio devices, and proceed
         if (accessibilityGranted && microphoneGranted) {

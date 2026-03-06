@@ -601,9 +601,10 @@ pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
     };
 
     info!(
-        "Using paste method: {:?}, delay: {}ms",
-        paste_method, paste_delay_ms
+        "Using paste method: {:?}, delay: {}ms, text length: {} chars",
+        paste_method, paste_delay_ms, text.len()
     );
+    log::debug!("Paste text content: {:?}", &text);
 
     // Get the managed Enigo instance
     let enigo_state = app_handle
