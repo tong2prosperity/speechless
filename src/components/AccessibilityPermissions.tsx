@@ -6,6 +6,7 @@ import {
   requestAccessibilityPermission,
 } from "tauri-plugin-macos-permissions-api";
 import { commands } from "@/bindings";
+import { Alert } from "@/components/ui/Alert";
 
 // Define permission state type
 type PermissionState = "request" | "verify" | "granted";
@@ -72,8 +73,8 @@ const AccessibilityPermissions: React.FC = () => {
     initialSetup();
   }, [isMacOS]);
 
-  // Skip rendering on non-macOS platforms, if permission is already granted, or in development mode
-  if (!isMacOS || hasAccessibility || import.meta.env.DEV) {
+  // Skip rendering on non-macOS platforms or if permission is already granted
+  if (!isMacOS || hasAccessibility) {
     return null;
   }
 
@@ -95,21 +96,24 @@ const AccessibilityPermissions: React.FC = () => {
   const config = buttonConfig[permissionState] as ButtonConfig;
 
   return (
-    <div className="p-4 w-full rounded-lg border border-mid-gray">
-      <div className="flex justify-between items-center gap-2">
-        <div className="">
-          <p className="text-sm font-medium">
+    <Alert variant="warning" className="mb-4">
+      <div className="flex justify-between items-center gap-4 w-full">
+        <div>
+          <p className="font-medium">
+            {t("accessibility.permissionsRequired")}
+          </p>
+          <p className="mt-1 text-yellow-400/80">
             {t("accessibility.permissionsDescription")}
           </p>
         </div>
         <button
           onClick={handleButtonClick}
-          className={`min-h-10 ${config.className}`}
+          className={`shrink-0 min-h-10 ${config.className}`}
         >
           {config.text}
         </button>
       </div>
-    </div>
+    </Alert>
   );
 };
 
