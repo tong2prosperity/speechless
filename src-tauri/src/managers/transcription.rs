@@ -610,12 +610,16 @@ impl Drop for TranscriptionManager {
         self.shutdown_signal.store(true, Ordering::Relaxed);
 
         // Wait for the thread to finish gracefully
-        if let Some(handle) = self.watcher_handle.lock().unwrap().take() {
-            if let Err(e) = handle.join() {
-                warn!("Failed to join idle watcher thread: {:?}", e);
-            } else {
-                debug!("Idle watcher thread joined successfully");
+        if let Ok(mut guard) = self.watcher_handle.lock() {
+            if let Some(handle) = guard.take() {
+                if let Err(e) = handle.join() {
+                    warn!("Failed to join idle watcher thread: {:?}", e);
+                } else {
+                    debug!("Idle watcher thread joined successfully");
+                }
             }
+        } else {
+            warn!("Could not lock watcher_handle during TranscriptionManager shutdown (mutex poisoned)");
         }
     }
 }

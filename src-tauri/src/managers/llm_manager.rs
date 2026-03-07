@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use modelscope_ng::{ModelScope, ProgressCallback};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -454,8 +454,12 @@ impl Drop for LlmManager {
     fn drop(&mut self) {
         self.shutdown_signal.store(true, Ordering::Relaxed);
         let _ = self.worker_tx.try_send(LlmWorkerCommand::Shutdown);
-        if let Some(handle) = self.watcher_handle.lock().unwrap().take() {
-            let _ = handle.join();
+        if let Ok(mut guard) = self.watcher_handle.lock() {
+            if let Some(handle) = guard.take() {
+                let _ = handle.join();
+            }
+        } else {
+            warn!("Could not lock watcher_handle during LlmManager shutdown (mutex poisoned)");
         }
     }
 }
