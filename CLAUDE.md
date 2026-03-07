@@ -32,22 +32,24 @@ bun run check:translations
 
 ```bash
 mkdir -p src-tauri/resources/models
-curl -o src-tauri/resources/models/silero_vad_v4.onnx https://blob.handy.computer/silero_vad_v4.onnx
+curl -o src-tauri/resources/models/silero_vad_v4.onnx https://blob.Speechless.computer/silero_vad_v4.onnx
 ```
 
 ## Architecture Overview
 
-Speechless (formerly Handy) is a cross-platform desktop speech-to-text app built with Tauri 2.x (Rust backend + React/TypeScript frontend). It runs entirely offline — audio capture, VAD, transcription, and optional LLM post-processing all happen locally.
+Speechless (formerly Speechless) is a cross-platform desktop speech-to-text app built with Tauri 2.x (Rust backend + React/TypeScript frontend). It runs entirely offline — audio capture, VAD, transcription, and optional LLM post-processing all happen locally.
 
-**Note:** The project uses a patched Tauri runtime (`tauri-runtime`, `tauri-runtime-wry`, `tauri-utils`) from `cjpais/tauri` branch `handy-2.9.1` — see `[patch.crates-io]` in `Cargo.toml`.
+**Note:** The project uses a patched Tauri runtime (`tauri-runtime`, `tauri-runtime-wry`, `tauri-utils`) from `cjpais/tauri` branch `Speechless-2.9.1` — see `[patch.crates-io]` in `Cargo.toml`.
 
 ### Backend (src-tauri/src/)
 
 **Entry points:**
+
 - `main.rs` — CLI argument parsing (clap), then launches Tauri
 - `lib.rs` — Tauri setup, plugin registration, manager initialization, signal handling
 
 **Managers (`managers/`)** — Core business logic, initialized at startup and stored in Tauri managed state:
+
 - `audio.rs` — Audio recording and device management
 - `model.rs` — Model downloading (from ModelScope/HTTP) and file management
 - `transcription.rs` — Speech-to-text pipeline orchestration
@@ -58,9 +60,10 @@ Speechless (formerly Handy) is a cross-platform desktop speech-to-text app built
 **TranscriptionCoordinator (`transcription_coordinator.rs`)** — Critical component that serializes all transcription lifecycle events (keyboard input, signals, cancel, processing-finished) through a single thread via `mpsc` channel. Eliminates race conditions between shortcuts, CLI signals, and the async pipeline.
 
 **Other key modules:**
+
 - `commands/` — Tauri command handlers (annotated with `#[tauri::command]` + `#[specta::specta]` for auto-generated TS bindings)
 - `navi_llm/` — Local LLM inference engine (config, model loading, chat sessions)
-- `shortcut/` — Global keyboard shortcut handling (dual implementation: `handy-keys` crate + Tauri global-shortcut plugin)
+- `shortcut/` — Global keyboard shortcut handling (dual implementation: `Speechless-keys` crate + Tauri global-shortcut plugin)
 - `actions.rs` — Maps shortcut bindings to transcription actions
 - `settings.rs` — Application settings (persisted via `tauri-plugin-store`)
 - `audio_toolkit/` — Low-level audio: device enumeration, recording, resampling (`rubato`), VAD (`vad-rs` with Silero)
@@ -125,7 +128,7 @@ Use conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`
 
 ## CLI Parameters
 
-Handy supports command-line parameters on all platforms for integration with scripts, window managers, and autostart configurations.
+Speechless supports command-line parameters on all platforms for integration with scripts, window managers, and autostart configurations.
 
 **Implementation files:**
 
