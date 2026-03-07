@@ -39,10 +39,18 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
     accessibility: "checking",
     microphone: "checking",
   });
+  const [showManualContinue, setShowManualContinue] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onCompleteRef = useRef(onComplete);
+  const hasInitializedRef = useRef(false);
   const errorCountRef = useRef<number>(0);
   const MAX_POLLING_ERRORS = 3;
+
+  // Keep onComplete ref up-to-date
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   const allGranted =
     permissions.accessibility === "granted" &&
@@ -56,7 +64,7 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
 
     // Skip immediately on non-macOS - no permissions needed
     if (!isMac) {
-      onComplete();
+      onCompleteRef.current();
       return;
     }
 
@@ -68,8 +76,9 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
           checkMicrophonePermission(),
         ]);
 
-        // If accessibility is granted, initialize Enigo and shortcuts
-        if (accessibilityGranted) {
+        // If accessibility is granted, initialize Enigo and shortcuts (only once)
+        if (accessibilityGranted && !hasInitializedRef.current) {
+          hasInitializedRef.current = true;
           try {
             await Promise.all([
               commands.initializeEnigo(),
@@ -90,7 +99,7 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
         // If both already granted, refresh audio devices and skip ahead
         if (accessibilityGranted && microphoneGranted) {
           await Promise.all([refreshAudioDevices(), refreshOutputDevices()]);
-          timeoutRef.current = setTimeout(() => onComplete(), 300);
+          timeoutRef.current = setTimeout(() => onCompleteRef.current(), 300);
         }
       } catch (error) {
         console.error("Failed to check permissions:", error);
@@ -103,11 +112,16 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
     };
 
     checkInitial();
-  }, [onComplete, refreshAudioDevices, refreshOutputDevices, t]);
+  }, [refreshAudioDevices, refreshOutputDevices, t]);
 
   // Polling for permissions after user clicks a button
   const startPolling = useCallback(() => {
     if (pollingRef.current) return;
+
+    // Show manual continue button after 15 seconds of polling
+    const manualContinueTimeout = setTimeout(() => {
+      setShowManualContinue(true);
+    }, 15000);
 
     pollingRef.current = setInterval(async () => {
       try {
@@ -130,8 +144,9 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
           return newState;
         });
 
-        // Initialize Enigo and shortcuts when accessibility is newly granted
-        if (accessibilityGranted) {
+        // Initialize Enigo and shortcuts when accessibility is newly granted (only once)
+        if (accessibilityGranted && !hasInitializedRef.current) {
+          hasInitializedRef.current = true;
           Promise.all([
             commands.initializeEnigo(),
             commands.initializeShortcuts(),
@@ -142,13 +157,14 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
 
         // If both granted, stop polling, refresh audio devices, and proceed
         if (accessibilityGranted && microphoneGranted) {
+          clearTimeout(manualContinueTimeout);
           if (pollingRef.current) {
             clearInterval(pollingRef.current);
             pollingRef.current = null;
           }
           // Now that we have mic permission, refresh audio devices
           await Promise.all([refreshAudioDevices(), refreshOutputDevices()]);
-          timeoutRef.current = setTimeout(() => onComplete(), 500);
+          timeoutRef.current = setTimeout(() => onCompleteRef.current(), 500);
         }
 
         // Reset error count on success
@@ -163,11 +179,13 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
             clearInterval(pollingRef.current);
             pollingRef.current = null;
           }
+          clearTimeout(manualContinueTimeout);
+          setShowManualContinue(true);
           toast.error(t("onboarding.permissions.errors.checkFailed"));
         }
       }
     }, 1000);
-  }, [onComplete, refreshAudioDevices, refreshOutputDevices, t]);
+  }, [refreshAudioDevices, refreshOutputDevices, t]);
 
   // Cleanup polling and timeouts on unmount
   useEffect(() => {
@@ -317,7 +335,15 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
           </div>
         </div>
 
-        {import.meta.env.DEV && (
+        {showManualContinue && (
+          <button
+            onClick={onComplete}
+            className="mt-4 text-sm text-text/50 hover:text-text/80 underline transition-colors cursor-pointer"
+          >
+            {t("onboarding.permissions.continueAnyway")}
+          </button>
+        )}
+        {import.meta.env.DEV && !showManualContinue && (
           <button
             onClick={onComplete}
             className="mt-4 text-xs text-text/30 hover:text-text/50 underline transition-colors cursor-pointer"

@@ -45,10 +45,10 @@ const RecordingOverlay: React.FC = () => {
       unlistenLevel = await listen<number[]>("mic-level", (event) => {
         const newLevels = event.payload as number[];
 
-        // Apply asymmetric smoothing: fast attack, slow release
+        // Apply asymmetric smoothing: fast attack, moderate release
         const smoothed = smoothedLevelsRef.current.map((prev, i) => {
           const target = Math.min(1.0, newLevels[i] || 0);
-          const alpha = target > prev ? 0.3 : 0.08;
+          const alpha = target > prev ? 0.5 : 0.15;
           return prev + (target - prev) * alpha;
         });
 
@@ -105,8 +105,8 @@ const RecordingOverlay: React.FC = () => {
                 key={i}
                 className="bar"
                 style={{
-                  height: `${Math.min(20, 4 + v * 16)}px`,
-                  opacity: Math.max(0.3, 0.3 + v * 0.7),
+                  height: `${Math.min(28, 4 + v * 24)}px`,
+                  opacity: Math.max(0.35, 0.35 + v * 0.65),
                 }}
               />
             ))}

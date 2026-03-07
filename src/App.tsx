@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { Toaster } from "sonner";
 import { useTranslation } from "react-i18next";
 import { platform } from "@tauri-apps/plugin-os";
@@ -96,34 +96,40 @@ function App() {
 
   const checkOnboardingStatus = async () => {
     try {
+      // Check permissions status on macOS for all users
+      let permissionsGranted = true;
+      if (platform() === "macos") {
+        try {
+          const [hasAccessibility, hasMicrophone] = await Promise.all([
+            checkAccessibilityPermission(),
+            checkMicrophonePermission(),
+          ]);
+          permissionsGranted = hasAccessibility && hasMicrophone;
+        } catch (e) {
+          console.warn("Failed to check permissions:", e);
+        }
+      }
+
       // Check if they have any models available
       const result = await commands.hasAnyModelsAvailable();
       const hasModels = result.status === "ok" && result.data;
 
       if (hasModels) {
-        // Returning user - but check if they need to grant permissions on macOS
         setIsReturningUser(true);
-        if (platform() === "macos") {
-          try {
-            const [hasAccessibility, hasMicrophone] = await Promise.all([
-              checkAccessibilityPermission(),
-              checkMicrophonePermission(),
-            ]);
-            if (!hasAccessibility || !hasMicrophone) {
-              // Missing permissions - show accessibility onboarding
-              setOnboardingStep("accessibility");
-              return;
-            }
-          } catch (e) {
-            console.warn("Failed to check permissions:", e);
-            // If we can't check, proceed to main app and let them fix it there
-          }
+        if (!permissionsGranted) {
+          setOnboardingStep("accessibility");
+        } else {
+          setOnboardingStep("done");
         }
-        setOnboardingStep("done");
       } else {
-        // New user - start full onboarding
         setIsReturningUser(false);
-        setOnboardingStep("accessibility");
+        if (!permissionsGranted) {
+          // New user without permissions - start full onboarding
+          setOnboardingStep("accessibility");
+        } else {
+          // Permissions already granted, skip to model selection
+          setOnboardingStep("model");
+        }
       }
     } catch (error) {
       console.error("Failed to check onboarding status:", error);
@@ -131,11 +137,11 @@ function App() {
     }
   };
 
-  const handleAccessibilityComplete = () => {
+  const handleAccessibilityComplete = useCallback(() => {
     // Returning users already have models, skip to main app
     // New users need to select a model
     setOnboardingStep(isReturningUser ? "done" : "model");
-  };
+  }, [isReturningUser]);
 
   const handleModelSelected = () => {
     // Transition to main app - user has started a download

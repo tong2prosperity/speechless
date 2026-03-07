@@ -68,18 +68,18 @@
   display: flex;
   align-items: center;
   justify-content: space-evenly;
-  height: 20px;
+  height: 28px;
   width: 100%;
 }
 
 .bar {
   flex: 1;
-  max-width: 6px;
+  max-width: 8px;
   background: #007aff; /* Apple System Blue */
   border-radius: 9999px;
   transition:
-    height 180ms ease-out,
-    opacity 180ms ease-out;
+    height 120ms ease-out,
+    opacity 120ms ease-out;
   min-height: 4px;
 }
 
@@ -135,7 +135,7 @@
 @keyframes pulse-dot {
   0%,
   100% {
-    opacity: 0.4;
+    opacity: 0.3;
   }
   50% {
     opacity: 1;
