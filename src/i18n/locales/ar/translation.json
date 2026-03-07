@@ -242,6 +242,7 @@
           "none": "بلا",
           "externalScript": "نص برمجي خارجي"
         },
+        "directWarning": "يحاكي الوضع المباشر الكتابة حرفًا بحرف. قد يتسبب ذلك في تكرار النص أو تشويهه عند تفعيل طريقة إدخال (IME). يُنصح باستخدام طرق الحافظة (مثل Cmd/Ctrl+V) للغات CJK واللغات الأخرى التي تعتمد على IME.",
         "externalScriptPlaceholder": "/path/to/your/script.sh"
       },
       "typingTool": {

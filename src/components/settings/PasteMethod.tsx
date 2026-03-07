@@ -90,6 +90,11 @@ export const PasteMethodSetting: React.FC<PasteMethodProps> = React.memo(
             }
             disabled={isUpdating("paste_method")}
           />
+          {selectedMethod === "direct" && (
+            <p className="text-xs text-yellow-600 dark:text-yellow-500">
+              {t("settings.advanced.pasteMethod.directWarning")}
+            </p>
+          )}
           {selectedMethod === "external_script" && (
             <Input
               type="text"

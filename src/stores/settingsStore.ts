@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import type { AppSettings as Settings, AudioDevice } from "@/bindings";
 import { commands } from "@/bindings";
+import { trackSettingsChanged } from "@/lib/analytics";
 
 interface SettingsStore {
   settings: Settings | null;
@@ -277,6 +278,8 @@ export const useSettingsStore = create<SettingsStore>()(
         } else if (key !== "bindings" && key !== "selected_model") {
           console.warn(`No handler for setting: ${String(key)}`);
         }
+
+        trackSettingsChanged({ setting_key: String(key) });
       } catch (error) {
         console.error(`Failed to update setting ${String(key)}:`, error);
         if (settings) {

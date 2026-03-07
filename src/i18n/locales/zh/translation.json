@@ -272,6 +272,7 @@
           "none": "无",
           "externalScript": "外部脚本"
         },
+        "directWarning": "直接模式逐字符模拟键入，当输入法（IME）处于活跃状态时，可能导致文字重复或乱码。建议 CJK 等依赖输入法的语言使用剪贴板粘贴方式（如 Cmd/Ctrl+V）。",
         "externalScriptPlaceholder": "/path/to/your/script.sh"
       },
       "typingTool": {

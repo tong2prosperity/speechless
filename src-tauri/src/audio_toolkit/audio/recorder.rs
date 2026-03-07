@@ -12,7 +12,7 @@ use cpal::{
 use crate::audio_toolkit::{
     audio::{AudioVisualiser, FrameResampler},
     constants,
-    vad::{self, VadFrame},
+    vad::{self, VadFrame, SILERO_FRAME_MS},
     VoiceActivityDetector,
 };
 
@@ -249,7 +249,7 @@ fn run_consumer(
     let mut frame_resampler = FrameResampler::new(
         in_sample_rate as usize,
         constants::WHISPER_SAMPLE_RATE as usize,
-        Duration::from_millis(30),
+        Duration::from_millis(SILERO_FRAME_MS as u64),
     );
 
     let mut processed_samples = Vec::<f32>::new();

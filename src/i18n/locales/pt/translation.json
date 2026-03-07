@@ -264,6 +264,7 @@
           "none": "Nenhum",
           "externalScript": "Script externo"
         },
+        "directWarning": "O modo direto simula a digitação caractere por caractere. Isso pode causar texto duplicado ou incorreto quando um método de entrada (IME) está ativo. Métodos baseados na área de transferência (ex. Cmd/Ctrl+V) são recomendados para idiomas CJK e outros que dependem de IME.",
         "externalScriptPlaceholder": "/caminho/para/seu/script.sh"
       },
       "typingTool": {

@@ -253,12 +253,44 @@ static FILLER_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
         .collect()
 });
 
+/// Removes trailing repeated substrings from text.
+///
+/// ASR models sometimes produce duplicated trailing content, e.g.
+/// "你好，我去你家玩？我去你家玩？" → "你好，我去你家玩？"
+///
+/// Checks suffix substrings of increasing length; if the tail matches the
+/// substring immediately before it, the duplicate tail is removed.
+/// Minimum repeat length is 4 characters to avoid false positives.
+fn remove_trailing_repetition(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let len = chars.len();
+    if len < 8 {
+        return text.to_string();
+    }
+
+    // Try repeat lengths from longest (half the text) down to 4 chars.
+    // We look for the longest trailing repeated segment.
+    let max_repeat_len = len / 2;
+    for repeat_len in (4..=max_repeat_len).rev() {
+        let tail_start = len - repeat_len;
+        let prev_start = tail_start - repeat_len;
+        if chars[prev_start..tail_start] == chars[tail_start..] {
+            // Found a duplicate tail — remove it and recurse in case of 3+ repeats
+            let trimmed: String = chars[..tail_start].iter().collect();
+            return remove_trailing_repetition(&trimmed);
+        }
+    }
+
+    text.to_string()
+}
+
 /// Filters transcription output by removing filler words and stutter artifacts.
 ///
 /// This function cleans up raw transcription text by:
 /// 1. Removing filler words (uh, um, hmm, etc.)
 /// 2. Collapsing repeated 1-2 letter stutters (e.g., "wh wh wh" -> "wh")
-/// 3. Cleaning up excess whitespace
+/// 3. Removing trailing repeated substrings (ASR repetition artifacts)
+/// 4. Cleaning up excess whitespace
 ///
 /// # Arguments
 /// * `text` - The raw transcription text to filter
@@ -275,6 +307,9 @@ pub fn filter_transcription_output(text: &str) -> String {
 
     // Collapse repeated 1-2 letter words (stutter artifacts like "wh wh wh wh")
     filtered = collapse_stutters(&filtered);
+
+    // Remove trailing repeated substrings (common ASR artifact, especially for CJK)
+    filtered = remove_trailing_repetition(&filtered);
 
     // Clean up multiple spaces to single space
     filtered = MULTI_SPACE_PATTERN.replace_all(&filtered, " ").to_string();
@@ -457,5 +492,54 @@ mod tests {
             "got double-counted result: {}",
             result
         );
+    }
+
+    #[test]
+    fn test_remove_trailing_repetition_chinese() {
+        let text = "你好，我去你家玩？我去你家玩？";
+        let result = remove_trailing_repetition(text);
+        assert_eq!(result, "你好，我去你家玩？");
+    }
+
+    #[test]
+    fn test_remove_trailing_repetition_triple() {
+        let text = "今天天气不错今天天气不错今天天气不错";
+        let result = remove_trailing_repetition(text);
+        assert_eq!(result, "今天天气不错");
+    }
+
+    #[test]
+    fn test_remove_trailing_repetition_english() {
+        let text = "hello world hello world";
+        let result = remove_trailing_repetition(text);
+        assert_eq!(result, "hello world ");
+    }
+
+    #[test]
+    fn test_remove_trailing_repetition_no_repeat() {
+        let text = "这是一段正常的文本，没有重复";
+        let result = remove_trailing_repetition(text);
+        assert_eq!(result, "这是一段正常的文本，没有重复");
+    }
+
+    #[test]
+    fn test_remove_trailing_repetition_short_text() {
+        let text = "你好";
+        let result = remove_trailing_repetition(text);
+        assert_eq!(result, "你好");
+    }
+
+    #[test]
+    fn test_remove_trailing_repetition_mixed() {
+        let text = "你好，今天天气不错啊还，我去你家玩？我去你家玩？";
+        let result = remove_trailing_repetition(text);
+        assert_eq!(result, "你好，今天天气不错啊还，我去你家玩？");
+    }
+
+    #[test]
+    fn test_filter_removes_trailing_repetition() {
+        let text = "So I was thinking about this about this";
+        let result = filter_transcription_output(text);
+        assert_eq!(result, "So I was thinking about this");
     }
 }

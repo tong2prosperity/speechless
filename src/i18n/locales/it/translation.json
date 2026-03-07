@@ -264,6 +264,7 @@
           "none": "Nessuno",
           "externalScript": "Script esterno"
         },
+        "directWarning": "La modalità diretta simula la digitazione carattere per carattere. Ciò può causare testo duplicato o errato quando un metodo di input (IME) è attivo. Per le lingue CJK e altre che dipendono dall'IME, si consiglia di utilizzare metodi basati sugli appunti (es. Cmd/Ctrl+V).",
         "externalScriptPlaceholder": "/percorso/del/tuo/script.sh"
       },
       "typingTool": {

@@ -268,6 +268,7 @@
           "none": "None",
           "externalScript": "External Script"
         },
+        "directWarning": "Direct mode simulates typing character by character. This may cause duplicate or garbled text when an input method (IME) is active. Clipboard-based methods (e.g. Cmd/Ctrl+V) are recommended for CJK and other IME-dependent languages.",
         "externalScriptPlaceholder": "/path/to/your/script.sh"
       },
       "typingTool": {

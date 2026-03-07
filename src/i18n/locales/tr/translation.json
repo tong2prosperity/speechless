@@ -264,6 +264,7 @@
           "none": "Yok",
           "externalScript": "Harici Betik"
         },
+        "directWarning": "Doğrudan mod, karakter karakter yazma simülasyonu yapar. Bir giriş yöntemi (IME) etkinken metin tekrarlanabilir veya bozulabilir. CJK ve diğer IME'ye bağımlı diller için pano tabanlı yöntemler (ör. Cmd/Ctrl+V) önerilir.",
         "externalScriptPlaceholder": "/dosya/yolu/betik.sh"
       },
       "typingTool": {

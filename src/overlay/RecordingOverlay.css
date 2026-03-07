@@ -50,12 +50,12 @@
 }
 
 .overlay-middle {
-  min-width: 140px;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
   justify-content: center;
   gap: 2px;
+  overflow: hidden;
 }
 
 .overlay-right {
@@ -67,16 +67,19 @@
 .bars-container {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 3px;
+  justify-content: space-evenly;
   height: 20px;
+  width: 100%;
 }
 
 .bar {
-  width: 3.5px;
+  flex: 1;
+  max-width: 6px;
   background: #007aff; /* Apple System Blue */
   border-radius: 9999px;
-  transition: height 120ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    height 180ms ease-out,
+    opacity 180ms ease-out;
   min-height: 4px;
 }
 

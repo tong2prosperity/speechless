@@ -17,8 +17,8 @@ const RecordingOverlay: React.FC = () => {
   const { t } = useTranslation();
   const [isVisible, setIsVisible] = useState(false);
   const [state, setState] = useState<OverlayState>("recording");
-  const [levels, setLevels] = useState<number[]>(Array(32).fill(0));
-  const smoothedLevelsRef = useRef<number[]>(Array(32).fill(0));
+  const [levels, setLevels] = useState<number[]>(Array(16).fill(0));
+  const smoothedLevelsRef = useRef<number[]>(Array(16).fill(0));
   const direction = getLanguageDirection(i18n.language);
 
   useEffect(() => {
@@ -45,14 +45,15 @@ const RecordingOverlay: React.FC = () => {
       unlistenLevel = await listen<number[]>("mic-level", (event) => {
         const newLevels = event.payload as number[];
 
-        // Apply smoothing to reduce jitter and carefully amplify
+        // Apply asymmetric smoothing: fast attack, slow release
         const smoothed = smoothedLevelsRef.current.map((prev, i) => {
-          const target = Math.min(1.0, (newLevels[i] || 0) * 1.15); // Reduce amplification for more natural volume
-          return prev * 0.65 + target * 0.35; // Increase dampening to prevent jitter
+          const target = Math.min(1.0, newLevels[i] || 0);
+          const alpha = target > prev ? 0.3 : 0.08;
+          return prev + (target - prev) * alpha;
         });
 
         smoothedLevelsRef.current = smoothed;
-        setLevels(smoothed.slice(0, 9));
+        setLevels(smoothed);
       });
     };
 
@@ -104,10 +105,8 @@ const RecordingOverlay: React.FC = () => {
                 key={i}
                 className="bar"
                 style={{
-                  height: `${Math.min(20, 4 + Math.pow(v, 1.2) * 16)}px`, // Linearize the exponential curve so small values don't explode
-                  transition:
-                    "height 80ms cubic-bezier(0.16, 1, 0.3, 1), opacity 80ms cubic-bezier(0.16, 1, 0.3, 1)",
-                  opacity: Math.max(0.3, 0.3 + v * 0.7), // Smooth opacity too
+                  height: `${Math.min(20, 4 + v * 16)}px`,
+                  opacity: Math.max(0.3, 0.3 + v * 0.7),
                 }}
               />
             ))}

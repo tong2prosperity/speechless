@@ -264,6 +264,7 @@
           "none": "Ninguno",
           "externalScript": "Script externo"
         },
+        "directWarning": "El modo directo simula la escritura carácter por carácter. Esto puede causar texto duplicado o incorrecto cuando un método de entrada (IME) está activo. Se recomiendan los métodos basados en el portapapeles (ej. Cmd/Ctrl+V) para idiomas CJK y otros que dependen de IME.",
         "externalScriptPlaceholder": "/ruta/a/su/script.sh"
       },
       "typingTool": {

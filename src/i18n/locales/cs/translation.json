@@ -264,6 +264,7 @@
           "none": "Žádné",
           "externalScript": "Externí skript"
         },
+        "directWarning": "Přímý režim simuluje psaní znak po znaku. Při aktivní vstupní metodě (IME) může dojít k duplikaci nebo zkomolení textu. Pro CJK a další jazyky závislé na IME se doporučují metody založené na schránce (např. Cmd/Ctrl+V).",
         "externalScriptPlaceholder": "/cesta/k/vasemu/skriptu.sh"
       },
       "typingTool": {

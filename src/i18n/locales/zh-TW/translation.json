@@ -264,6 +264,7 @@
           "none": "無",
           "externalScript": "外部腳本"
         },
+        "directWarning": "直接模式逐字元模擬鍵入，當輸入法（IME）處於啟用狀態時，可能導致文字重複或亂碼。建議 CJK 等依賴輸入法的語言使用剪貼簿貼上方式（如 Cmd/Ctrl+V）。",
         "externalScriptPlaceholder": "/path/to/your/script.sh"
       },
       "typingTool": {

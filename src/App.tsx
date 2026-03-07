@@ -15,6 +15,7 @@ import { useSettings } from "./hooks/useSettings";
 import { useSettingsStore } from "./stores/settingsStore";
 import { commands } from "@/bindings";
 import { getLanguageDirection, initializeRTL } from "@/lib/utils/rtl";
+import { trackOnboardingCompleted } from "@/lib/analytics";
 
 type OnboardingStep = "accessibility" | "model" | "done";
 
@@ -139,6 +140,7 @@ function App() {
   const handleModelSelected = () => {
     // Transition to main app - user has started a download
     setOnboardingStep("done");
+    trackOnboardingCompleted();
   };
 
   useEffect(() => {

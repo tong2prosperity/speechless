@@ -264,6 +264,7 @@
           "none": "Brak",
           "externalScript": "Skrypt zewnętrzny"
         },
+        "directWarning": "Tryb bezpośredni symuluje wpisywanie znak po znaku. Przy aktywnej metodzie wprowadzania (IME) może to powodować duplikowanie lub zniekształcenie tekstu. Dla języków CJK i innych zależnych od IME zalecane są metody oparte na schowku (np. Cmd/Ctrl+V).",
         "externalScriptPlaceholder": "/sciezka/do/twojego/skryptu.sh"
       },
       "typingTool": {

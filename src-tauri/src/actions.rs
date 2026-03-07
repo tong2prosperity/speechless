@@ -17,8 +17,9 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
+use serde::Serialize;
 use tauri::AppHandle;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 /// Drop guard that notifies the [`TranscriptionCoordinator`] when the
 /// transcription pipeline finishes — whether it completes normally or panics.
@@ -35,6 +36,26 @@ impl Drop for FinishGuard {
 pub trait ShortcutAction: Send + Sync {
     fn start(&self, app: &AppHandle, binding_id: &str, shortcut_str: &str);
     fn stop(&self, app: &AppHandle, binding_id: &str, shortcut_str: &str);
+}
+
+#[derive(Clone, Serialize)]
+struct AnalyticsTranscriptionStarted {
+    binding_id: String,
+    always_on_mic: bool,
+}
+
+#[derive(Clone, Serialize)]
+struct AnalyticsTranscriptionCompleted {
+    duration_ms: u128,
+    char_count: usize,
+    model_id: Option<String>,
+    post_processed: bool,
+}
+
+#[derive(Clone, Serialize)]
+struct AnalyticsTranscriptionFailed {
+    error: String,
+    model_id: Option<String>,
 }
 
 struct TranscribeAction {
@@ -451,6 +472,13 @@ impl ShortcutAction for TranscribeAction {
         }
 
         if recording_started {
+            let _ = app.emit(
+                "analytics:transcription_started",
+                AnalyticsTranscriptionStarted {
+                    binding_id: binding_id.clone(),
+                    always_on_mic: is_always_on,
+                },
+            );
             // Dynamically register the cancel shortcut in a separate task to avoid deadlock
             shortcut::register_cancel_shortcut(app);
         } else {
@@ -514,6 +542,7 @@ impl ShortcutAction for TranscribeAction {
 
                 let transcription_time = Instant::now();
                 let samples_clone = samples.clone(); // Clone for history saving
+                let current_model_id = tm.get_current_model();
                 match tm.transcribe(samples) {
                     Ok(transcription) => {
                         debug!(
@@ -595,6 +624,8 @@ impl ShortcutAction for TranscribeAction {
                                 post_processed_text = Some(final_text.clone());
                             }
 
+                            let was_post_processed = post_processed_text.is_some();
+
                             // Save to history with post-processed text and prompt
                             let hm_clone = Arc::clone(&hm);
                             let transcription_for_history = transcription.clone();
@@ -611,6 +642,16 @@ impl ShortcutAction for TranscribeAction {
                                     error!("Failed to save transcription to history: {}", e);
                                 }
                             });
+
+                            let _ = ah.emit(
+                                "analytics:transcription_completed",
+                                AnalyticsTranscriptionCompleted {
+                                    duration_ms: transcription_time.elapsed().as_millis(),
+                                    char_count: final_text.len(),
+                                    model_id: current_model_id.clone(),
+                                    post_processed: was_post_processed,
+                                },
+                            );
 
                             // Paste the final text (either processed or original)
                             let ah_clone = ah.clone();
@@ -639,6 +680,13 @@ impl ShortcutAction for TranscribeAction {
                     }
                     Err(err) => {
                         debug!("Global Shortcut Transcription error: {}", err);
+                        let _ = ah.emit(
+                            "analytics:transcription_failed",
+                            AnalyticsTranscriptionFailed {
+                                error: err.to_string(),
+                                model_id: current_model_id.clone(),
+                            },
+                        );
                         utils::hide_recording_overlay(&ah);
                         change_tray_icon(&ah, TrayIconState::Idle);
                     }

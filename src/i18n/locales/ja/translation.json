@@ -264,6 +264,7 @@
           "none": "なし",
           "externalScript": "外部スクリプト"
         },
+        "directWarning": "ダイレクトモードは1文字ずつキー入力をシミュレートします。IME（入力メソッド）が有効な場合、テキストの重複や文字化けが発生する可能性があります。CJK言語などIMEを使用する言語では、クリップボード方式（Cmd/Ctrl+V）の使用を推奨します。",
         "externalScriptPlaceholder": "/path/to/your/script.sh"
       },
       "typingTool": {

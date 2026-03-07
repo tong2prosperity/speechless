@@ -264,6 +264,7 @@
           "none": "Aucun",
           "externalScript": "Script externe"
         },
+        "directWarning": "Le mode direct simule la saisie caractère par caractère. Cela peut provoquer des doublons ou du texte incorrect lorsqu'une méthode de saisie (IME) est active. Les méthodes basées sur le presse-papiers (ex. Cmd/Ctrl+V) sont recommandées pour les langues CJK et autres langues dépendantes d'un IME.",
         "externalScriptPlaceholder": "/chemin/vers/votre/script.sh"
       },
       "typingTool": {

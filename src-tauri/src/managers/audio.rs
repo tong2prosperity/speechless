@@ -1,4 +1,4 @@
-use crate::audio_toolkit::{list_input_devices, vad::SmoothedVad, AudioRecorder, SileroVad};
+use crate::audio_toolkit::{list_input_devices, AudioRecorder, SileroVad, VadConfig};
 use crate::helpers::clamshell;
 use crate::settings::{get_settings, AppSettings};
 use crate::utils;
@@ -118,15 +118,12 @@ fn create_audio_recorder(
     vad_path: &str,
     app_handle: &tauri::AppHandle,
 ) -> Result<AudioRecorder, anyhow::Error> {
-    let silero = SileroVad::new(vad_path, 0.3)
+    let vad = SileroVad::new(vad_path, VadConfig::default())
         .map_err(|e| anyhow::anyhow!("Failed to create SileroVad: {}", e))?;
-    let smoothed_vad = SmoothedVad::new(Box::new(silero), 15, 15, 2);
 
-    // Recorder with VAD plus a spectrum-level callback that forwards updates to
-    // the frontend.
     let recorder = AudioRecorder::new()
         .map_err(|e| anyhow::anyhow!("Failed to create AudioRecorder: {}", e))?
-        .with_vad(Box::new(smoothed_vad))
+        .with_vad(Box::new(vad))
         .with_level_callback({
             let app_handle = app_handle.clone();
             move |levels| {
@@ -251,7 +248,7 @@ impl AudioRecordingManager {
             .app_handle
             .path()
             .resolve(
-                "resources/models/silero_vad_v4.onnx",
+                "resources/models/silero_v6.onnx",
                 tauri::path::BaseDirectory::Resource,
             )
             .map_err(|e| anyhow::anyhow!("Failed to resolve VAD path: {}", e))?;

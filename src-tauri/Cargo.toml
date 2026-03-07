@@ -55,7 +55,9 @@ hound = "3.5.1"
 log = "0.4.25"
 env_filter = "0.1.0"
 tokio = "1.43.0"
-vad-rs = { git = "https://github.com/cjpais/vad-rs", default-features = false }
+ndarray = "0.17"
+ort = { version = "=2.0.0-rc.11", features = ["ndarray", "coreml"] }
+ort-sys = { version = "=2.0.0-rc.11" }
 enigo = "0.6.1"
 rodio = { git = "https://github.com/cjpais/rodio.git" }
 reqwest = { version = "0.12", features = ["json", "stream"] }

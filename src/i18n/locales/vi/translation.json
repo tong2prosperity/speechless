@@ -264,6 +264,7 @@
           "none": "Không có",
           "externalScript": "Script bên ngoài"
         },
+        "directWarning": "Chế độ trực tiếp mô phỏng nhập từng ký tự. Điều này có thể gây ra văn bản trùng lặp hoặc sai khi phương thức nhập (IME) đang hoạt động. Nên sử dụng các phương thức dựa trên clipboard (ví dụ: Cmd/Ctrl+V) cho các ngôn ngữ CJK và các ngôn ngữ phụ thuộc IME khác.",
         "externalScriptPlaceholder": "/duong-dan/toi/script.sh"
       },
       "typingTool": {

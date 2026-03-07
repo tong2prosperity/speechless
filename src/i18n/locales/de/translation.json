@@ -264,6 +264,7 @@
           "none": "Keine",
           "externalScript": "Externes Skript"
         },
+        "directWarning": "Der Direktmodus simuliert die zeichenweise Eingabe. Bei aktiver Eingabemethode (IME) kann es zu doppeltem oder fehlerhaftem Text kommen. Für CJK und andere IME-abhängige Sprachen werden Zwischenablage-basierte Methoden (z.B. Cmd/Strg+V) empfohlen.",
         "externalScriptPlaceholder": "/pfad/zu/ihrem/skript.sh"
       },
       "typingTool": {

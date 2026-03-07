@@ -8,6 +8,7 @@ import {
   type LlmModelInfo,
   type Result,
 } from "@/bindings";
+import { trackModelDownloaded } from "@/lib/analytics";
 
 interface DownloadProgress {
   model_id: string;
@@ -518,8 +519,19 @@ export const useModelStore = create<ModelsStore>()(
         if (isLlm) {
           set({ llmDownloading: false, llmDownloaded: true });
           get().loadLlmModels();
+          const llmModel = get().llmModels.find((m) => m.id === modelId);
+          trackModelDownloaded({
+            model_id: modelId,
+            model_name: llmModel?.name,
+          });
           return;
         }
+        const model = get().models.find((m) => m.id === modelId);
+        trackModelDownloaded({
+          model_id: modelId,
+          model_name: model?.name,
+          size_mb: model?.size_mb,
+        });
         set(
           produce((state) => {
             delete state.downloadingModels[modelId];

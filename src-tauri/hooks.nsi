@@ -1,3 +1,15 @@
+!macro NSIS_HOOK_PREINSTALL
+  ; Silently install VC++ Redistributable if VCOMP140.DLL is missing
+  IfFileExists "$SYSDIR\VCOMP140.DLL" vcredist_done
+    DetailPrint "Installing Visual C++ Redistributable..."
+    InitPluginsDir
+    NSISdl::download "https://aka.ms/vs/17/release/vc_redist.x64.exe" "$PLUGINSDIR\vc_redist.x64.exe"
+    Pop $0
+    StrCmp $0 "success" 0 vcredist_done
+    ExecWait '"$PLUGINSDIR\vc_redist.x64.exe" /install /quiet /norestart'
+  vcredist_done:
+!macroend
+
 !macro NSIS_HOOK_POSTINSTALL
   DetailPrint "Positioning DLLs for runtime loading in $INSTDIR..."
   

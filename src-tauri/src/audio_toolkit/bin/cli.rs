@@ -3,8 +3,7 @@ use std::io::{self, Write};
 
 use speechless_app_lib::audio_toolkit::{
     audio::{list_input_devices, CpalDeviceInfo},
-    vad::SmoothedVad,
-    AudioRecorder, SileroVad,
+    AudioRecorder, SileroVad, VadConfig,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -175,9 +174,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=========================");
     print_help();
 
-    let silero = SileroVad::new("./resources/models/silero_vad_v4.onnx", 0.5)?;
-    let smoothed_vad = SmoothedVad::new(Box::new(silero), 15, 15);
-    let recorder = AudioRecorder::new()?.with_vad(Box::new(smoothed_vad));
+    let vad = SileroVad::new(
+        "./resources/models/silero_v6.onnx",
+        VadConfig {
+            threshold: 0.5,
+            ..VadConfig::default()
+        },
+    )?;
+    let recorder = AudioRecorder::new()?.with_vad(Box::new(vad));
     let mut state = RecorderState::new(recorder);
 
     let mut devices = list_input_devices()?;
